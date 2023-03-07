@@ -350,7 +350,8 @@ class SvgUri extends Component {
       for (let i = 0; i < node.childNodes.length; i++) {
         const isTextValue = node.childNodes[i].nodeValue;
         if (isTextValue) {
-          arrayElements.push(node.childNodes[i].nodeValue);
+          // 解决svg文件中存在格式化的空格问题和换行问题
+          node.nodeName === 'text' && arrayElements.push(node.childNodes[i].nodeValue);
         } else {
           const nodo = this.inspectNode(node.childNodes[i]);
           if (nodo != null) {
