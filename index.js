@@ -99,7 +99,7 @@ class SvgUri extends Component {
     super(props);
 
     this.state = { fill: props.fill, svgXmlData: props.svgXmlData };
-
+    this.scale = 1;
     this.createSVGElement = this.createSVGElement.bind(this);
     this.obtainComponentAtts = this.obtainComponentAtts.bind(this);
     this.inspectNode = this.inspectNode.bind(this);
@@ -185,16 +185,21 @@ class SvgUri extends Component {
     this.trimElementChilden(childs);
     let componentAtts = {};
     const i = ind++;
+    let scaleWidth = 1;
+    let scaleHeight = 1;
     switch (node.nodeName) {
       case 'svg':
         componentAtts = this.obtainComponentAtts(node, SVG_ATTS);
-        if (this.props.width) {
-          componentAtts.width = this.props.width;
+        if (this.props.width && componentAtts.width) {
+          scaleWidth = this.props.width / componentAtts.width;
+          Number.isNaN(scaleWidth) && (scaleWidth = 1);
         }
-        if (this.props.height) {
-          componentAtts.height = this.props.height;
+        if (this.props.height && componentAtts.height) {
+          scaleHeight = this.props.height / componentAtts.height;
+          Number.isNaN(scaleHeight) && (scaleHeight = 1);
         }
 
+        this.scale = Math.min(scaleHeight, scaleHeight);
         return (
           <Svg key={i} {...componentAtts}>
             {childs}
@@ -376,7 +381,11 @@ class SvgUri extends Component {
 
       const rootSVG = this.inspectNode(doc.childNodes[0]);
 
-      return <View style={this.props.style}>{rootSVG}</View>;
+      return (
+        <View style={[{ display: 'flex', justifyContent: 'center', alignItems: 'center' }, this.props.style, { transform: [{ scale: this.scale }] }]}>
+          {rootSVG}
+        </View>
+      );
     } catch (e) {
       console.error('ERROR SVG', e);
       return null;
