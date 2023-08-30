@@ -167,7 +167,7 @@ class SvgUri extends Component {
       responseXML = await response.text();
     } catch (e) {
       error = e;
-      console.error('ERROR SVG', e);
+      console.error('ERROR SVG fetchSVGData:', uri, e);
     } finally {
       if (this.isComponentMounted) {
         this.setState({ svgXmlData: responseXML }, () => {
