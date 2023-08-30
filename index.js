@@ -167,7 +167,7 @@ class SvgUri extends Component {
       responseXML = await response.text();
     } catch (e) {
       error = e;
-      console.error('ERROR SVG fetchSVGData:', uri, e);
+      console.warn('ERROR SVG fetchSVGData:', uri, e);
     } finally {
       if (this.isComponentMounted) {
         this.setState({ svgXmlData: responseXML }, () => {
@@ -404,7 +404,7 @@ class SvgUri extends Component {
 
       return <View style={[{ justifyContent: 'center', alignItems: 'center' }, this.props.style, , this.getViewSize()]}>{rootSVG}</View>;
     } catch (e) {
-      console.error('ERROR SVG', e);
+      console.warn('ERROR SVG', e);
       return null;
     }
   }
