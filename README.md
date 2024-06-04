@@ -23,12 +23,12 @@ react-native link react-native-svg # not react-native-svg-uri-yum !!!
 
 ## Props
 
-| Prop         | Type          | Default                                      | Note                                                      |
-| ------------ | ------------- | -------------------------------------------- | --------------------------------------------------------- |
-| `source`     | `ImageSource` |                                              | Same kind of `source` prop that `<Image />` component has |
-| `svgXmlData` | `String`      |                                              | You can pass the SVG as String directly                   |
-| `fill`       | `Color`       |                                              | Overrides all fill attributes of the svg file             |
-| `fillAll`    | `Boolean`     | Adds the fill color to the entire svg object |
+| Prop         | Type                               | Default                                      | Note                                                      |
+| ------------ | ---------------------------------- | -------------------------------------------- | --------------------------------------------------------- |
+| `source`     | `ImageSource`                      |                                              | Same kind of `source` prop that `<Image />` component has |
+| `svgXmlData` | `String`                           |                                              | You can pass the SVG as String directly                   |
+| `fill`       | `Color` / [{color:'xx',fill:'xx'}] |                                              | Overrides all fill attributes of the svg file  , or replace original fill value to  fill color value           |
+| `fillAll`    | `Boolean`                          | Adds the fill color to the entire svg object |
 
 ## Known Bugs
 
@@ -45,7 +45,21 @@ import SvgUri from 'react-native-svg-uri-yum';
 
 const TestSvgUri = () => (
   <View style={styles.container}>
-    <SvgUri width='200' height='200' source={{ uri: 'http://thenewcode.com/assets/images/thumbnails/homer-simpson.svg' }} />
+    <SvgUri width='200' height='200' source={{ uri: 'http://thenewcode.com/assets/images/thumbnails/homer-simpson.svg' }} fill='#00FF00' />
+
+     <SvgUri
+         source={{ uri: 'http://thenewcode.com/assets/images/thumbnails/homer-simpson.svg' }} 
+          fill={[
+            {
+              color: '#76BFFF',
+              fill: 'red'
+            },
+            { color: '#659CF8', fill: 'green' },
+            { color: '#E8A200', fill: 'blue' },
+            { color: '#ECD300', fill: 'pink' },
+            { color: '#787CF5', fill: 'pink' }
+          ]}
+        />
   </View>
 );
 ```
