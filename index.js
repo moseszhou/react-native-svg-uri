@@ -353,7 +353,19 @@ class SvgUri extends Component {
       .map(utils.removePixelsFromNodeValue)
       .filter(utils.getEnabledAttributes(enabledAttributes.concat(COMMON_ATTS)))
       .reduce((acc, { nodeName, nodeValue }) => {
-        acc[nodeName] = this.state.fill && nodeName === 'fill' && nodeValue !== 'none' ? this.state.fill : nodeValue;
+        if(nodeName === 'fill') {
+          if(this.state.fill) {
+            if(typeof this.state.fill === 'string') {
+              nodeValue = this.state.fill;
+            }else if(Array.isArray(this.state.fill)){
+              const newValue = this.state.fill.find((item) => item.color === nodeValue);
+              if(newValue) {
+                nodeValue = newValue.fill;
+              }
+            }
+          }
+        }
+        acc[nodeName] =  nodeValue;
         return acc;
       }, {});
     Object.assign(componentAtts, styleAtts);
@@ -416,7 +428,10 @@ SvgUri.propTypes = {
   height: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   svgXmlData: PropTypes.string,
   source: PropTypes.any,
-  fill: PropTypes.string,
+  fill: PropTypes.oneOfType([
+    PropTypes.string,
+    PropTypes.arrayOf(PropTypes.object),
+  ]),
   onLoad: PropTypes.func,
   fillAll: PropTypes.bool
 };
