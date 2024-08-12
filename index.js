@@ -1,6 +1,5 @@
-import React, { Component } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { View } from 'react-native';
-import PropTypes from 'prop-types';
 import xmldom from 'xmldom';
 import resolveAssetSource from 'react-native/Libraries/Image/resolveAssetSource';
 
@@ -85,7 +84,7 @@ function fixYPosition(y, node) {
   if (node.attributes) {
     const fontSizeAttr = Object.keys(node.attributes).find((a) => node.attributes[a].name === 'font-size');
     if (fontSizeAttr) {
-      return '' + (parseFloat(y) - parseFloat(node.attributes[fontSizeAttr].value));
+      return parseFloat(y) - parseFloat(node.attributes[fontSizeAttr].value);
     }
   }
   if (!node.parentNode) {
@@ -100,68 +99,234 @@ function fixYPosition(y, node) {
  * @param {number} orgSize
  */
 function getScale(size, orgSize) {
-  let s = size / orgSize;
+  const s = size / orgSize;
   return Number.isNaN(s) ? 1 : s;
 }
-
-class SvgUri extends Component {
-  constructor(props) {
-    super(props);
-
-    this.state = { fill: props.fill, svgXmlData: props.svgXmlData };
-    this.createSVGElement = this.createSVGElement.bind(this);
-    this.obtainComponentAtts = this.obtainComponentAtts.bind(this);
-    this.inspectNode = this.inspectNode.bind(this);
-    this.fetchSVGData = this.fetchSVGData.bind(this);
-
-    this.isComponentMounted = false;
-
-    // Gets the image data from an URL or a static file
-    if (props.source) {
-      const source = resolveAssetSource(props.source) || {};
-      this.fetchSVGData(source.uri);
+// Remove empty strings from children array
+function trimElementChildren(children) {
+  // eslint-disable-next-line no-restricted-syntax
+  for (const child of children) {
+    if (typeof child === 'string') {
+      if (child.trim().length === 0) children.splice(children.indexOf(child), 1);
     }
   }
+}
 
-  componentDidMount() {
-    this.isComponentMounted = true;
+/**
+ * 获取Svg缩放大小
+ * @param {{ width: number, height: number }} componentAtts
+ */
+function getSvgScale(width, height, componentAtts) {
+  const scaleWidth = getScale(width, componentAtts.width);
+  const scaleHeight = getScale(height, componentAtts.height);
+
+  return Math.min(scaleWidth, scaleHeight);
+}
+
+function obtainComponentAtts({ attributes }, enabledAttributes, fill, fillAll) {
+  const styleAtts = {};
+
+  if (fill && fillAll) {
+    styleAtts.fill = fill;
   }
 
-  static getDerivedStateFromProps(nextProps, state) {
-    if (nextProps.source) {
-      const source = resolveAssetSource(nextProps.source) || {};
-      const oldSource = resolveAssetSource(state.source) || {};
-      if (source.uri !== oldSource.uri) {
-        return { source };
+  Array.from(attributes).forEach(({ nodeName, nodeValue }) => {
+    Object.assign(
+      styleAtts,
+      utils.transformStyle({
+        nodeName,
+        nodeValue,
+        fillProp: fill
+      })
+    );
+  });
+
+  const componentAtts = Array.from(attributes)
+    .map(utils.camelCaseNodeName)
+    .map(utils.removePixelsFromNodeValue)
+    .filter(utils.getEnabledAttributes(enabledAttributes.concat(COMMON_ATTS)))
+    .reduce((acc, { nodeName, nodeValue }) => {
+      if (nodeName === 'fill') {
+        if (fill) {
+          if (typeof fill === 'string') {
+            nodeValue = fill;
+          } else if (Array.isArray(fill)) {
+            const newValue = fill.find((item) => item.color === nodeValue);
+            if (newValue) {
+              nodeValue = newValue.fill;
+            }
+          }
+        }
       }
-    }
+      acc[nodeName] = nodeValue;
+      return acc;
+    }, {});
+  Object.assign(componentAtts, styleAtts);
 
-    if (nextProps.svgXmlData !== state.svgXmlData && nextProps.svgXmlData) {
-      return { svgXmlData: nextProps.svgXmlData };
-    }
+  return componentAtts;
+}
 
-    if (nextProps.fill !== state.fill && nextProps.fill) {
-      return { fill: nextProps.fill };
+function AddFill(fn, fill, fillAll) {
+  return function (node, enabledAttributes) {
+    return fn(node, enabledAttributes, fill, fillAll);
+  };
+}
+function createSVGElement(node, children, fill, fillAll, width, height) {
+  trimElementChildren(children);
+  const _obtainComponentAtts = AddFill(obtainComponentAtts, fill, fillAll);
+  let componentAtts = {};
+  const i = ind++;
+  switch (node.nodeName) {
+    case 'svg': {
+      componentAtts = _obtainComponentAtts(node, SVG_ATTS);
+      const scale = getSvgScale(width, height, componentAtts);
+      return (
+        <Svg key={i} {...componentAtts} style={[componentAtts.style, { transform: [{ scale }] }]}>
+          {children}
+        </Svg>
+      );
     }
+    case 'g':
+      componentAtts = _obtainComponentAtts(node, G_ATTS);
+      return (
+        <G key={i} {...componentAtts}>
+          {children}
+        </G>
+      );
+    case 'path':
+      componentAtts = _obtainComponentAtts(node, PATH_ATTS);
+      return (
+        <Path key={i} {...componentAtts}>
+          {children}
+        </Path>
+      );
+    case 'circle':
+      componentAtts = _obtainComponentAtts(node, CIRCLE_ATTS);
+      return (
+        <Circle key={i} {...componentAtts}>
+          {children}
+        </Circle>
+      );
+    case 'rect':
+      componentAtts = _obtainComponentAtts(node, RECT_ATTS);
+      return (
+        <Rect key={i} {...componentAtts}>
+          {children}
+        </Rect>
+      );
+    case 'line':
+      componentAtts = _obtainComponentAtts(node, LINE_ATTS);
+      return (
+        <Line key={i} {...componentAtts}>
+          {children}
+        </Line>
+      );
+    case 'defs':
+      return <Defs key={i}>{children}</Defs>;
+    case 'linearGradient':
+      componentAtts = _obtainComponentAtts(node, LINEARG_ATTS);
+      return (
+        <LinearGradient key={i} {...componentAtts}>
+          {children}
+        </LinearGradient>
+      );
+    case 'radialGradient':
+      componentAtts = _obtainComponentAtts(node, RADIALG_ATTS);
+      return (
+        <RadialGradient key={i} {...componentAtts}>
+          {children}
+        </RadialGradient>
+      );
+    case 'stop':
+      componentAtts = _obtainComponentAtts(node, STOP_ATTS);
+      return (
+        <Stop key={i} {...componentAtts}>
+          {children}
+        </Stop>
+      );
+    case 'ellipse':
+      componentAtts = _obtainComponentAtts(node, ELLIPSE_ATTS);
+      return (
+        <Ellipse key={i} {...componentAtts}>
+          {children}
+        </Ellipse>
+      );
+    case 'polygon':
+      componentAtts = _obtainComponentAtts(node, POLYGON_ATTS);
+      return (
+        <Polygon key={i} {...componentAtts}>
+          {children}
+        </Polygon>
+      );
+    case 'polyline':
+      componentAtts = _obtainComponentAtts(node, POLYLINE_ATTS);
+      return (
+        <Polyline key={i} {...componentAtts}>
+          {children}
+        </Polyline>
+      );
+    case 'text':
+      componentAtts = _obtainComponentAtts(node, TEXT_ATTS);
+      if (componentAtts.y) {
+        componentAtts.y = fixYPosition(componentAtts.y, node);
+      }
+      return (
+        <Text key={i} {...componentAtts}>
+          {children}
+        </Text>
+      );
+    case 'tspan':
+      componentAtts = _obtainComponentAtts(node, TEXT_ATTS);
+      if (componentAtts.y) {
+        componentAtts.y = fixYPosition(componentAtts.y, node);
+      }
+      return (
+        <TSpan key={i} {...componentAtts}>
+          {children}
+        </TSpan>
+      );
+    default:
+      return null;
+  }
+}
 
+function inspectNode(node, fill, fillAll, width, height) {
+  // Only process accepted elements
+  if (!ACCEPTED_SVG_ELEMENTS.includes(node.nodeName)) {
     return null;
   }
 
-  componentDidUpdate(prevProps, prevState) {
-    const oldSource = resolveAssetSource(prevState.source) || {};
-    const source = resolveAssetSource(this.state.source) || {};
-    if (source.uri !== oldSource.uri) {
-      this.fetchSVGData(source.uri);
+  // Process the xml node
+  const arrayElements = [];
+
+  // if have children process them.
+  // Recursive function.
+  if (node.childNodes && node.childNodes.length > 0) {
+    for (let i = 0; i < node.childNodes.length; i++) {
+      const isTextValue = node.childNodes[i].nodeValue;
+      if (isTextValue) {
+        // 解决svg文件中存在格式化的空格问题和换行问题
+        node.nodeName === 'text' && arrayElements.push(node.childNodes[i].nodeValue);
+      } else {
+        const nodo = this.inspectNode(node.childNodes[i]);
+        if (nodo != null) {
+          arrayElements.push(nodo);
+        }
+      }
     }
   }
 
-  componentWillUnmount() {
-    this.isComponentMounted = false;
-  }
+  return createSVGElement(node, arrayElements, fill, fillAll, width, height);
+}
 
-  async fetchSVGData(uri) {
-    let responseXML = null,
-      error = null;
+function SvgUri(props) {
+  const { fill, fillAll, svgXmlData: xmlData, source = {}, onLoad, style, width: _width, height: _height } = props;
+  const [svgXmlData, setSvgXmlData] = useState(xmlData);
+  const uriRef = useRef(source.uri);
+
+  const fetchSVGData = useEvent(async (uri) => {
+    let responseXML = null;
+    let error = null;
     try {
       const response = await fetch(uri);
       responseXML = await response.text();
@@ -169,271 +334,67 @@ class SvgUri extends Component {
       error = e;
       console.warn('ERROR SVG fetchSVGData:', uri, e);
     } finally {
-      if (this.isComponentMounted) {
-        this.setState({ svgXmlData: responseXML }, () => {
-          const { onLoad } = this.props;
-          if (onLoad && !error) {
-            onLoad();
-          }
-        });
+      // 如果请求资源已经改变，则不忽略此次请求的返回值
+      if (uriRef.current === uri) {
+        setSvgXmlData(responseXML);
+        if (onLoad && !error) {
+          onLoad();
+        }
       }
     }
 
     return responseXML;
-  }
-  // Remove empty strings from children array
-  trimElementChilden(children) {
-    for (child of children) {
-      if (typeof child === 'string') {
-        if (child.trim().length === 0) children.splice(children.indexOf(child), 1);
-      }
+  });
+
+  useEffect(() => {
+    if (source) {
+      const _source = resolveAssetSource(source) || {};
+      uriRef.current = _source.uri;
+      fetchSVGData(_source.uri);
     }
+  }, [source, fetchSVGData]);
+
+  const width = _width || style.width;
+  const height = _height || style.height;
+
+  const rootSVG = useMemo(() => {
+    const inputSVG = svgXmlData.substring(svgXmlData.indexOf('<svg '), svgXmlData.indexOf('</svg>') + 6);
+    const doc = new xmldom.DOMParser().parseFromString(inputSVG);
+    return inspectNode(doc.childNodes[0], fill, fillAll, width, height);
+  }, [svgXmlData, fill, fillAll, width, height]);
+
+  if (svgXmlData == null || svgXmlData === undefined) {
+    return null;
   }
 
-  /**
-   * 获取真实显示大小
-   */
-  getViewSize() {
-    const style = this.props.style || {};
-    return {
-      width: this.props.width || style.width,
-      height: this.props.height || style.height
-    };
-  }
-
-  /**
-   * 获取Svg缩放大小
-   * @param {{ width: number, height: number }} componentAtts
-   */
-  getSvgScale(componentAtts) {
-    const size = this.getViewSize();
-    const scaleWidth = getScale(size.width, componentAtts.width);
-    const scaleHeight = getScale(size.height, componentAtts.height);
-
-    return Math.min(scaleWidth, scaleHeight);
-  }
-
-  createSVGElement(node, childs) {
-    this.trimElementChilden(childs);
-    let componentAtts = {};
-    const i = ind++;
-    switch (node.nodeName) {
-      case 'svg':
-        componentAtts = this.obtainComponentAtts(node, SVG_ATTS);
-        scale = this.getSvgScale(componentAtts);
-        return (
-          <Svg key={i} {...componentAtts} style={[componentAtts.style, { transform: [{ scale }] }]}>
-            {childs}
-          </Svg>
-        );
-      case 'g':
-        componentAtts = this.obtainComponentAtts(node, G_ATTS);
-        return (
-          <G key={i} {...componentAtts}>
-            {childs}
-          </G>
-        );
-      case 'path':
-        componentAtts = this.obtainComponentAtts(node, PATH_ATTS);
-        return (
-          <Path key={i} {...componentAtts}>
-            {childs}
-          </Path>
-        );
-      case 'circle':
-        componentAtts = this.obtainComponentAtts(node, CIRCLE_ATTS);
-        return (
-          <Circle key={i} {...componentAtts}>
-            {childs}
-          </Circle>
-        );
-      case 'rect':
-        componentAtts = this.obtainComponentAtts(node, RECT_ATTS);
-        return (
-          <Rect key={i} {...componentAtts}>
-            {childs}
-          </Rect>
-        );
-      case 'line':
-        componentAtts = this.obtainComponentAtts(node, LINE_ATTS);
-        return (
-          <Line key={i} {...componentAtts}>
-            {childs}
-          </Line>
-        );
-      case 'defs':
-        return <Defs key={i}>{childs}</Defs>;
-      case 'linearGradient':
-        componentAtts = this.obtainComponentAtts(node, LINEARG_ATTS);
-        return (
-          <LinearGradient key={i} {...componentAtts}>
-            {childs}
-          </LinearGradient>
-        );
-      case 'radialGradient':
-        componentAtts = this.obtainComponentAtts(node, RADIALG_ATTS);
-        return (
-          <RadialGradient key={i} {...componentAtts}>
-            {childs}
-          </RadialGradient>
-        );
-      case 'stop':
-        componentAtts = this.obtainComponentAtts(node, STOP_ATTS);
-        return (
-          <Stop key={i} {...componentAtts}>
-            {childs}
-          </Stop>
-        );
-      case 'ellipse':
-        componentAtts = this.obtainComponentAtts(node, ELLIPSE_ATTS);
-        return (
-          <Ellipse key={i} {...componentAtts}>
-            {childs}
-          </Ellipse>
-        );
-      case 'polygon':
-        componentAtts = this.obtainComponentAtts(node, POLYGON_ATTS);
-        return (
-          <Polygon key={i} {...componentAtts}>
-            {childs}
-          </Polygon>
-        );
-      case 'polyline':
-        componentAtts = this.obtainComponentAtts(node, POLYLINE_ATTS);
-        return (
-          <Polyline key={i} {...componentAtts}>
-            {childs}
-          </Polyline>
-        );
-      case 'text':
-        componentAtts = this.obtainComponentAtts(node, TEXT_ATTS);
-        if (componentAtts.y) {
-          componentAtts.y = fixYPosition(componentAtts.y, node);
-        }
-        return (
-          <Text key={i} {...componentAtts}>
-            {childs}
-          </Text>
-        );
-      case 'tspan':
-        componentAtts = this.obtainComponentAtts(node, TEXT_ATTS);
-        if (componentAtts.y) {
-          componentAtts.y = fixYPosition(componentAtts.y, node);
-        }
-        return (
-          <TSpan key={i} {...componentAtts}>
-            {childs}
-          </TSpan>
-        );
-      default:
-        return null;
-    }
-  }
-
-  obtainComponentAtts({ attributes }, enabledAttributes) {
-    const styleAtts = {};
-
-    if (this.state.fill && this.props.fillAll) {
-      styleAtts.fill = this.state.fill;
-    }
-
-    Array.from(attributes).forEach(({ nodeName, nodeValue }) => {
-      Object.assign(
-        styleAtts,
-        utils.transformStyle({
-          nodeName,
-          nodeValue,
-          fillProp: this.state.fill
-        })
-      );
-    });
-
-    const componentAtts = Array.from(attributes)
-      .map(utils.camelCaseNodeName)
-      .map(utils.removePixelsFromNodeValue)
-      .filter(utils.getEnabledAttributes(enabledAttributes.concat(COMMON_ATTS)))
-      .reduce((acc, { nodeName, nodeValue }) => {
-        if(nodeName === 'fill') {
-          if(this.state.fill) {
-            if(typeof this.state.fill === 'string') {
-              nodeValue = this.state.fill;
-            }else if(Array.isArray(this.state.fill)){
-              const newValue = this.state.fill.find((item) => item.color === nodeValue);
-              if(newValue) {
-                nodeValue = newValue.fill;
-              }
-            }
-          }
-        }
-        acc[nodeName] =  nodeValue;
-        return acc;
-      }, {});
-    Object.assign(componentAtts, styleAtts);
-
-    return componentAtts;
-  }
-
-  inspectNode(node) {
-    // Only process accepted elements
-    if (!ACCEPTED_SVG_ELEMENTS.includes(node.nodeName)) {
-      return null;
-    }
-
-    // Process the xml node
-    const arrayElements = [];
-
-    // if have children process them.
-    // Recursive function.
-    if (node.childNodes && node.childNodes.length > 0) {
-      for (let i = 0; i < node.childNodes.length; i++) {
-        const isTextValue = node.childNodes[i].nodeValue;
-        if (isTextValue) {
-          // 解决svg文件中存在格式化的空格问题和换行问题
-          node.nodeName === 'text' && arrayElements.push(node.childNodes[i].nodeValue);
-        } else {
-          const nodo = this.inspectNode(node.childNodes[i]);
-          if (nodo != null) {
-            arrayElements.push(nodo);
-          }
-        }
-      }
-    }
-
-    return this.createSVGElement(node, arrayElements);
-  }
-
-  render() {
-    try {
-      if (this.state.svgXmlData == null) {
-        return null;
-      }
-
-      const inputSVG = this.state.svgXmlData.substring(this.state.svgXmlData.indexOf('<svg '), this.state.svgXmlData.indexOf('</svg>') + 6);
-
-      const doc = new xmldom.DOMParser().parseFromString(inputSVG);
-
-      const rootSVG = this.inspectNode(doc.childNodes[0]);
-
-      return <View style={[{ justifyContent: 'center', alignItems: 'center' }, this.props.style, , this.getViewSize()]}>{rootSVG}</View>;
-    } catch (e) {
-      console.warn('ERROR SVG', e);
-      return null;
-    }
-  }
+  return <View style={[{ justifyContent: 'center', alignItems: 'center' }, style, { width, height }]}>{rootSVG}</View>;
 }
 
-SvgUri.propTypes = {
-  style: PropTypes.object,
-  width: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  height: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  svgXmlData: PropTypes.string,
-  source: PropTypes.any,
-  fill: PropTypes.oneOfType([
-    PropTypes.string,
-    PropTypes.arrayOf(PropTypes.object),
-  ]),
-  onLoad: PropTypes.func,
-  fillAll: PropTypes.bool
-};
+// 对象浅比较函数，用于React.memo
+function shallowEqual(prev, next) {
+  if (prev === next) return true;
+  if (typeof prev !== 'object' || prev === null || typeof next !== 'object' || next === null) return false;
+  const keysA = Object.keys(prev);
+  const keysB = Object.keys(next);
+  if (keysA.length !== keysB.length) return false;
+  for (let i = 0; i < keysA.length; i++) {
+    if (!Object.prototype.hasOwnProperty.call(next, keysA[i]) || prev[keysA[i]] !== next[keysA[i]]) return false;
+  }
+  return true;
+}
 
-module.exports = SvgUri;
+export default React.memo(SvgUri, (prevProps, nextProps) => {
+  return (
+    prevProps.xmlData === nextProps.xmlData &&
+    shallowEqual(prevProps.style, nextProps.style) &&
+    shallowEqual(prevProps.source, nextProps.source) &&
+    shallowEqual(prevProps.fill, nextProps.fill) &&
+    prevProps.fillAll === nextProps.fillAll
+  );
+});
+
+function useEvent(callback) {
+  const ref = useRef();
+  ref.current = callback;
+  return useCallback((...args) => ref.current(...args), [ref]);
+}
