@@ -22,63 +22,63 @@ import Svg, {
 
 import * as utils from './utils';
 
-const ACCEPTED_SVG_ELEMENTS = [
-  'svg',
-  'g',
-  'circle',
-  'path',
-  'rect',
-  'defs',
-  'line',
-  'linearGradient',
-  'radialGradient',
-  'stop',
-  'ellipse',
-  'polygon',
-  'polyline',
-  'text',
-  'tspan'
-];
-
-// Attributes from SVG elements that are mapped directly.
-const SVG_ATTS = ['viewBox', 'width', 'height'];
-const G_ATTS = ['id'];
-
-const CIRCLE_ATTS = ['cx', 'cy', 'r'];
-const PATH_ATTS = ['d'];
-const RECT_ATTS = ['width', 'height'];
-const LINE_ATTS = ['x1', 'y1', 'x2', 'y2'];
-const LINEARG_ATTS = LINE_ATTS.concat(['id', 'gradientUnits']);
-const RADIALG_ATTS = CIRCLE_ATTS.concat(['id', 'gradientUnits']);
-const STOP_ATTS = ['offset'];
-const ELLIPSE_ATTS = ['cx', 'cy', 'rx', 'ry'];
-
-const TEXT_ATTS = ['fontFamily', 'fontSize', 'fontWeight', 'textAnchor'];
-
-const POLYGON_ATTS = ['points'];
-const POLYLINE_ATTS = ['points'];
-
-const COMMON_ATTS = [
-  'fill',
-  'fillOpacity',
-  'stroke',
-  'strokeWidth',
-  'strokeOpacity',
-  'opacity',
-  'strokeLinecap',
-  'strokeLinejoin',
-  'strokeDasharray',
-  'strokeDashoffset',
-  'x',
-  'y',
-  'rotate',
-  'scale',
-  'origin',
-  'originX',
-  'originY'
-];
-
 let ind = 0;
+
+function SvgUri(props) {
+  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height } = props;
+  const [svgXmlData, setSvgXmlData] = useState(xmlData);
+  const uri = source && source.uri;
+  const uriRef = useRef(uri);
+
+  // eslint-disable-next-line no-shadow
+  const fetchSVGData = useEvent(async (uri) => {
+    let responseXML = null;
+    let error = null;
+    try {
+      const response = await fetch(uri);
+      responseXML = await response.text();
+    } catch (e) {
+      error = e;
+      console.warn('ERROR SVG fetchSVGData:', uri, e);
+    } finally {
+      // 如果请求资源已经改变，则不忽略此次请求的返回值
+      if (uriRef.current === uri) {
+        setSvgXmlData(responseXML);
+        if (onLoad && !error) {
+          onLoad();
+        }
+      }
+    }
+
+    return responseXML;
+  });
+
+  useEffect(() => {
+    if (typeof source === 'number' || (source && source.uri)) {
+      const _source = resolveAssetSource(source) || {};
+      uriRef.current = _source.uri;
+      fetchSVGData(_source.uri);
+    }
+  }, [source, fetchSVGData]);
+
+  const width = _width || style.width;
+  const height = _height || style.height;
+
+  const rootSVG = useMemo(() => {
+    if (!svgXmlData) {
+      return null;
+    }
+    const inputSVG = svgXmlData.substring(svgXmlData.indexOf('<svg '), svgXmlData.indexOf('</svg>') + 6);
+    const doc = new xmldom.DOMParser().parseFromString(inputSVG);
+    return inspectNode(doc.childNodes[0], fill, fillAll, width, height);
+  }, [svgXmlData, fill, fillAll, width, height]);
+
+  if (svgXmlData == null || svgXmlData === undefined) {
+    return null;
+  }
+
+  return <View style={[{ justifyContent: 'center', alignItems: 'center' }, style, { width, height }]}>{rootSVG}</View>;
+}
 
 function fixYPosition(y, node) {
   if (node.attributes) {
@@ -319,60 +319,6 @@ function inspectNode(node, fill, fillAll, width, height) {
   return createSVGElement(node, arrayElements, fill, fillAll, width, height);
 }
 
-function SvgUri(props) {
-  const { fill, fillAll, svgXmlData: xmlData, source = {}, onLoad, style, width: _width, height: _height } = props;
-  const [svgXmlData, setSvgXmlData] = useState(xmlData);
-  const uriRef = useRef(source.uri);
-
-  const fetchSVGData = useEvent(async (uri) => {
-    let responseXML = null;
-    let error = null;
-    try {
-      const response = await fetch(uri);
-      responseXML = await response.text();
-    } catch (e) {
-      error = e;
-      console.warn('ERROR SVG fetchSVGData:', uri, e);
-    } finally {
-      // 如果请求资源已经改变，则不忽略此次请求的返回值
-      if (uriRef.current === uri) {
-        setSvgXmlData(responseXML);
-        if (onLoad && !error) {
-          onLoad();
-        }
-      }
-    }
-
-    return responseXML;
-  });
-
-  useEffect(() => {
-    if (source) {
-      const _source = resolveAssetSource(source) || {};
-      uriRef.current = _source.uri;
-      fetchSVGData(_source.uri);
-    }
-  }, [source, fetchSVGData]);
-
-  const width = _width || style.width;
-  const height = _height || style.height;
-
-  const rootSVG = useMemo(() => {
-    if (svgXmlData == null || svgXmlData === undefined) {
-      return null;
-    }
-    const inputSVG = svgXmlData.substring(svgXmlData.indexOf('<svg '), svgXmlData.indexOf('</svg>') + 6);
-    const doc = new xmldom.DOMParser().parseFromString(inputSVG);
-    return inspectNode(doc.childNodes[0], fill, fillAll, width, height);
-  }, [svgXmlData, fill, fillAll, width, height]);
-
-  if (svgXmlData == null || svgXmlData === undefined) {
-    return null;
-  }
-
-  return <View style={[{ justifyContent: 'center', alignItems: 'center' }, style, { width, height }]}>{rootSVG}</View>;
-}
-
 // 对象浅比较函数，用于React.memo
 function shallowEqual(prev, next) {
   if (prev === next) return true;
@@ -385,6 +331,11 @@ function shallowEqual(prev, next) {
   }
   return true;
 }
+function useEvent(callback) {
+  const ref = useRef();
+  ref.current = callback;
+  return useCallback((...args) => ref.current(...args), [ref]);
+}
 
 export default React.memo(SvgUri, (prevProps, nextProps) => {
   return (
@@ -396,8 +347,58 @@ export default React.memo(SvgUri, (prevProps, nextProps) => {
   );
 });
 
-function useEvent(callback) {
-  const ref = useRef();
-  ref.current = callback;
-  return useCallback((...args) => ref.current(...args), [ref]);
-}
+const ACCEPTED_SVG_ELEMENTS = [
+  'svg',
+  'g',
+  'circle',
+  'path',
+  'rect',
+  'defs',
+  'line',
+  'linearGradient',
+  'radialGradient',
+  'stop',
+  'ellipse',
+  'polygon',
+  'polyline',
+  'text',
+  'tspan'
+];
+
+// Attributes from SVG elements that are mapped directly.
+const SVG_ATTS = ['viewBox', 'width', 'height'];
+const G_ATTS = ['id'];
+
+const CIRCLE_ATTS = ['cx', 'cy', 'r'];
+const PATH_ATTS = ['d'];
+const RECT_ATTS = ['width', 'height'];
+const LINE_ATTS = ['x1', 'y1', 'x2', 'y2'];
+const LINEARG_ATTS = LINE_ATTS.concat(['id', 'gradientUnits']);
+const RADIALG_ATTS = CIRCLE_ATTS.concat(['id', 'gradientUnits']);
+const STOP_ATTS = ['offset'];
+const ELLIPSE_ATTS = ['cx', 'cy', 'rx', 'ry'];
+
+const TEXT_ATTS = ['fontFamily', 'fontSize', 'fontWeight', 'textAnchor'];
+
+const POLYGON_ATTS = ['points'];
+const POLYLINE_ATTS = ['points'];
+
+const COMMON_ATTS = [
+  'fill',
+  'fillOpacity',
+  'stroke',
+  'strokeWidth',
+  'strokeOpacity',
+  'opacity',
+  'strokeLinecap',
+  'strokeLinejoin',
+  'strokeDasharray',
+  'strokeDashoffset',
+  'x',
+  'y',
+  'rotate',
+  'scale',
+  'origin',
+  'originX',
+  'originY'
+];
