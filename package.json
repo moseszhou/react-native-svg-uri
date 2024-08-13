@@ -20,11 +20,11 @@
   "author": "Matias Cortes(react-native-svg-uri)/Diego Francio (react-native-svg-uri-falker)/Moses Zhou (react-native-svg-uri-yum)",
   "license": "ISC",
   "dependencies": {
-    "react": "^17.0.1",
-    "react-native": "^0.68.5",
     "xmldom": "^0.1.22"
   },
   "peerDependencies": {
+    "react-native": ">=0.64.0",
+    "react": ">=16.0.0",
     "react-native-svg": "^9.11.1"
   },
   "bugs": {
@@ -35,11 +35,7 @@
     "@babel/core": "7.22.9",
     "@babel/eslint-parser": "7.22.9",
     "@babel/preset-env": "7.22.9",
-    "@types/node": "^14.0.0",
-    "@types/react": "^18.1.0",
     "babel-preset-react-native": "^4.0.1",
-    "cache-loader": "^4.1.0",
-    "chai": "^3.5.0",
     "eslint": "^8.36.0",
     "eslint-config-airbnb": "^19.0.4",
     "eslint-config-prettier": "^8.7.0",
@@ -51,7 +47,6 @@
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-react": "^7.32.2",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "mocha": "^3.2.0",
     "prettier": "^2.8.5"
   }
 }
