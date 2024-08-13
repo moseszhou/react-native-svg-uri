@@ -308,7 +308,7 @@ function inspectNode(node, fill, fillAll, width, height) {
         // 解决svg文件中存在格式化的空格问题和换行问题
         node.nodeName === 'text' && arrayElements.push(node.childNodes[i].nodeValue);
       } else {
-        const nodo = this.inspectNode(node.childNodes[i]);
+        const nodo = inspectNode(node.childNodes[i], fill, fillAll, width, height);
         if (nodo != null) {
           arrayElements.push(nodo);
         }
@@ -358,6 +358,9 @@ function SvgUri(props) {
   const height = _height || style.height;
 
   const rootSVG = useMemo(() => {
+    if (svgXmlData == null || svgXmlData === undefined) {
+      return null;
+    }
     const inputSVG = svgXmlData.substring(svgXmlData.indexOf('<svg '), svgXmlData.indexOf('</svg>') + 6);
     const doc = new xmldom.DOMParser().parseFromString(inputSVG);
     return inspectNode(doc.childNodes[0], fill, fillAll, width, height);
