@@ -339,7 +339,7 @@ function useEvent(callback) {
 
 export default React.memo(SvgUri, (prevProps, nextProps) => {
   return (
-    prevProps.xmlData === nextProps.xmlData &&
+    prevProps.svgXmlData === nextProps.svgXmlData &&
     shallowEqual(prevProps.style, nextProps.style) &&
     shallowEqual(prevProps.source, nextProps.source) &&
     shallowEqual(prevProps.fill, nextProps.fill) &&
