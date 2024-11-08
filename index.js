@@ -26,9 +26,15 @@ let ind = 0;
 
 function SvgUri(props) {
   const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height } = props;
-  const [svgXmlData, setSvgXmlData] = useState(xmlData);
+  const [svgXmlDataConst, setSvgXmlData] = useConstant(xmlData, (v1, v2) => v1 !== v2);
   const uri = source && source.uri;
   const uriRef = useRef(uri);
+
+  useMemo(() => {
+    setSvgXmlData(xmlData, false);
+  }, [xmlData, setSvgXmlData]);
+
+  const { current: svgXmlData } = svgXmlDataConst;
 
   // eslint-disable-next-line no-shadow
   const fetchSVGData = useEvent(async (uri) => {
@@ -336,6 +342,42 @@ function useEvent(callback) {
   ref.current = callback;
   return useCallback((...args) => ref.current(...args), [ref]);
 }
+
+const useForceUpdate = () => {
+  const [, setData] = useState(0);
+
+  return useCallback(() => {
+    setData((d) => d + 1);
+  }, []);
+};
+
+const useConstant = (defValue, defEqualityFn) => {
+  const ref = useRef(defValue);
+  const forceUpdate = useForceUpdate();
+  return [
+    useMemo(
+      () =>
+        Object.freeze({
+          get current() {
+            return ref.current;
+          },
+          set current(val) {
+            throw new Error('禁止直接赋值, 请使用Set方法');
+          }
+        }),
+      []
+    ),
+    useEvent((v, equalityFn = defEqualityFn) => {
+      const oldVal = ref.current;
+      ref.current = typeof v === 'function' ? v(ref.current) : v;
+
+      // 追加函数支持
+      if (typeof equalityFn === 'function' ? equalityFn(oldVal, ref.current) : equalityFn) {
+        forceUpdate();
+      }
+    })
+  ];
+};
 
 export default React.memo(SvgUri, (prevProps, nextProps) => {
   return (
