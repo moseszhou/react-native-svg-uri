@@ -79,9 +79,10 @@ function SvgUri(props) {
     return inspectNode(doc.childNodes[0], fill, fillAll, width, height);
   }, [svgXmlData, fill, fillAll, width, height]);
 
-  if (svgXmlData == null || svgXmlData === undefined) {
-    return null;
-  }
+  // 移除此处为了让svgXmlData为空时，能保持组件占位不变
+  // if (svgXmlData == null || svgXmlData === undefined) {
+  //   return null;
+  // }
 
   return <View style={[{ justifyContent: 'center', alignItems: 'center' }, style, { width, height }]}>{rootSVG}</View>;
 }
