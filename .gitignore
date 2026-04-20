@@ -2,3 +2,4 @@ node_modules
 .idea
 .specstory
 .cursorindexingignore
+.DS_Store
