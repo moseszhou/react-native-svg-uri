@@ -2,9 +2,20 @@
   "name": "react-native-svg-uri-yum",
   "version": "1.4.5",
   "description": "Render an SVG Image from an URL",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
   "scripts": {
-    "test": "./node_modules/mocha/bin/mocha --compilers js:babel-core/register"
+    "test": "jest",
+    "build": "tsup"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
   },
   "repository": {
     "type": "git",
@@ -23,8 +34,8 @@
     "xmldom": "^0.1.22"
   },
   "peerDependencies": {
-    "react-native": ">=0.64.0",
     "react": ">=16.0.0",
+    "react-native": ">=0.64.0",
     "react-native-svg": "^9.11.1"
   },
   "bugs": {
@@ -34,7 +45,13 @@
   "devDependencies": {
     "@babel/core": "7.22.9",
     "@babel/eslint-parser": "7.22.9",
-    "@babel/preset-env": "7.22.9",
+    "@babel/preset-env": "^7.29.5",
+    "@babel/preset-typescript": "^7.28.5",
+    "@types/jest": "^30.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-native": "^0.73.0",
+    "@types/xmldom": "^0.1.34",
+    "babel-jest": "^30.3.0",
     "babel-preset-react-native": "^4.0.1",
     "eslint": "^8.36.0",
     "eslint-config-airbnb": "^19.0.4",
@@ -47,6 +64,9 @@
     "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-react": "^7.32.2",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "prettier": "^2.8.5"
+    "jest": "^30.3.0",
+    "prettier": "^2.8.5",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3"
   }
 }
