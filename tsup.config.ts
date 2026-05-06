@@ -3,7 +3,6 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: ['src/index.tsx'],
   format: ['esm'],
-  outExtension: () => ({ js: '.js', dts: '.d.ts' }),
   dts: {
     compilerOptions: {
       ignoreDeprecations: '6.0',
