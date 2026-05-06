@@ -1,6 +1,6 @@
 {
   "name": "react-native-svg-uri-yum",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "Render an SVG Image from an URL",
   "module": "dist/index.mjs",
   "types": "dist/index.d.mts",
