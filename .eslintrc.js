@@ -123,7 +123,19 @@ const config = {
     'react/no-deprecated': ['off'],
     'react/no-unused-class-component-methods': ['off'],
     'arrow-body-style': ['off']
-  }
+  },
+  overrides: [
+    {
+      files: ['test/**/*.js'],
+      env: {
+        jest: true
+      },
+      rules: {
+        'import/no-unresolved': 'off',
+        'import/extensions': 'off'
+      }
+    }
+  ]
 }
 
 module.exports = config

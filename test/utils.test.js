@@ -1,19 +1,15 @@
-import {transformStyle, camelCase, removePixelsFromNodeValue, getEnabledAttributes} from '../src/utils';
+import { transformStyle, camelCase, removePixelsFromNodeValue, getEnabledAttributes } from '../src/utils';
 
 describe('transformStyle', () => {
   it('transforms style attribute', () => {
-    expect(
-      transformStyle({nodeName: 'style', nodeValue: 'fill:rgb(0,0,255);stroke:rgb(0,0,0)'})
-    ).toEqual({
+    expect(transformStyle({ nodeName: 'style', nodeValue: 'fill:rgb(0,0,255);stroke:rgb(0,0,0)' })).toEqual({
       fill: 'rgb(0,0,255)',
       stroke: 'rgb(0,0,0)',
     });
   });
 
   it('transforms style attribute with dash-case attribute', () => {
-    expect(
-      transformStyle({nodeName: 'style', nodeValue: 'stop-color:#ffffff'})
-    ).toEqual({
+    expect(transformStyle({ nodeName: 'style', nodeValue: 'stop-color:#ffffff' })).toEqual({
       stopColor: '#ffffff',
     });
   });
@@ -21,10 +17,10 @@ describe('transformStyle', () => {
 
 describe('removePixelsFromNodeValue', () => {
   it('removes pixels from x, y, height and width attributes', () => {
-    expect(removePixelsFromNodeValue({nodeName: 'x', nodeValue: '2px'})).toEqual({nodeName: 'x', nodeValue: '2'});
-    expect(removePixelsFromNodeValue({nodeName: 'y', nodeValue: '4px'})).toEqual({nodeName: 'y', nodeValue: '4'});
-    expect(removePixelsFromNodeValue({nodeName: 'height', nodeValue: '65px'})).toEqual({nodeName: 'height', nodeValue: '65'});
-    expect(removePixelsFromNodeValue({nodeName: 'width', nodeValue: '999px'})).toEqual({nodeName: 'width', nodeValue: '999'});
+    expect(removePixelsFromNodeValue({ nodeName: 'x', nodeValue: '2px' })).toEqual({ nodeName: 'x', nodeValue: '2' });
+    expect(removePixelsFromNodeValue({ nodeName: 'y', nodeValue: '4px' })).toEqual({ nodeName: 'y', nodeValue: '4' });
+    expect(removePixelsFromNodeValue({ nodeName: 'height', nodeValue: '65px' })).toEqual({ nodeName: 'height', nodeValue: '65' });
+    expect(removePixelsFromNodeValue({ nodeName: 'width', nodeValue: '999px' })).toEqual({ nodeName: 'width', nodeValue: '999' });
   });
 });
 
@@ -43,14 +39,14 @@ describe('getEnabledAttributes', () => {
     const enabledAttributes = ['x', 'y', 'strokeOpacity'];
     const hasEnabledAttribute = getEnabledAttributes(enabledAttributes);
 
-    expect(hasEnabledAttribute({nodeName: 'x'})).toEqual(true);
-    expect(hasEnabledAttribute({nodeName: 'stroke-opacity'})).toEqual(true);
+    expect(hasEnabledAttribute({ nodeName: 'x' })).toEqual(true);
+    expect(hasEnabledAttribute({ nodeName: 'stroke-opacity' })).toEqual(true);
   });
 
   it('return false when nodeName is not found', () => {
     const enabledAttributes = ['width', 'height'];
     const hasEnabledAttribute = getEnabledAttributes(enabledAttributes);
 
-    expect(hasEnabledAttribute({nodeName: 'depth'})).toEqual(false);
+    expect(hasEnabledAttribute({ nodeName: 'depth' })).toEqual(false);
   });
 });
