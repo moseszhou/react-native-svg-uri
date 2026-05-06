@@ -3,3 +3,4 @@ node_modules
 .specstory
 .cursorindexingignore
 .DS_Store
+.worktrees/
