@@ -23,6 +23,7 @@ import Svg, {
 import * as utils from './utils';
 
 let ind = 0;
+const cacheFetchSVGDataPromise = {};
 
 function SvgUri(props) {
   const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height } = props;
@@ -41,9 +42,12 @@ function SvgUri(props) {
     let responseXML = null;
     let error = null;
     try {
-      const response = await fetch(uri);
-      responseXML = await response.text();
+      if (!cacheFetchSVGDataPromise[uri]) {
+        cacheFetchSVGDataPromise[uri] = fetch(uri).then((r) => r.text());
+      }
+      responseXML = await cacheFetchSVGDataPromise[uri];
     } catch (e) {
+      delete cacheFetchSVGDataPromise[uri];
       error = e;
       console.warn('ERROR SVG fetchSVGData:', uri, e);
     } finally {
