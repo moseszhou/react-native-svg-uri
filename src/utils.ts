@@ -7,7 +7,7 @@ export const camelCaseNodeName = ({
 }: {
   nodeName: string;
   nodeValue: string;
-}) => ({ nodeName: camelCase(nodeName), nodeValue });
+}): { nodeName: string; nodeValue: string } => ({ nodeName: camelCase(nodeName), nodeValue });
 
 export const removePixelsFromNodeValue = ({
   nodeName,
@@ -15,7 +15,7 @@ export const removePixelsFromNodeValue = ({
 }: {
   nodeName: string;
   nodeValue: string;
-}) => ({ nodeName, nodeValue: nodeValue.replace('px', '') });
+}): { nodeName: string; nodeValue: string } => ({ nodeName, nodeValue: nodeValue.replace('px', '') });
 
 export const transformStyle = ({
   nodeName,
@@ -29,7 +29,7 @@ export const transformStyle = ({
   if (nodeName === 'style') {
     return nodeValue.split(';').reduce<Record<string, string>>((acc, attribute) => {
       const [property, value] = attribute.split(':');
-      if (property === '') return acc;
+      if (property === '' || value === undefined) return acc;
       return { ...acc, [camelCase(property)]: fillProp && property === 'fill' ? fillProp : value };
     }, {});
   }
