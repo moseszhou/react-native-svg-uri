@@ -1,27 +1,27 @@
 const config = {
-  extends: [ 'airbnb', 'airbnb/hooks', 'prettier'],
+  extends: ['airbnb', 'airbnb/hooks', 'prettier'],
   parser: '@babel/eslint-parser',
   plugins: ['react', 'prettier'],
   rules: {
     'no-unused-vars': [
       'error',
       {
-        varsIgnorePattern: 'Taro|React'
-      }
+        varsIgnorePattern: 'Taro|React',
+      },
     ],
     'react/jsx-filename-extension': [
       1,
       {
-        extensions: ['.js', '.jsx', '.tsx']
-      }
+        extensions: ['.js', '.jsx', '.tsx'],
+      },
     ],
     'no-unused-expressions': [
       2,
       {
         allowShortCircuit: true, // 允许短路运算符
         allowTernary: true, // 允许三目运算符
-        allowTaggedTemplates: true // 允许`纯字符串`
-      }
+        allowTaggedTemplates: true, // 允许`纯字符串`
+      },
     ],
     // 禁用强制没有使用this指针的方法必须定义为静态方法的检查
     'class-methods-use-this': 0,
@@ -59,16 +59,16 @@ const config = {
       2,
       {
         ignoreRefs: true,
-        allowArrowFunctions: true
-      }
+        allowArrowFunctions: true,
+      },
     ],
     // Prevent multiple component definition per file
     // https://github.com/yannickcr/eslint-plugin-react/blob/master/docs/rules/no-multi-comp.md
     'react/no-multi-comp': [
       0,
       {
-        ignoreStateless: true
-      }
+        ignoreStateless: true,
+      },
     ],
     // Do not use Array index in keys
     'react/no-array-index-key': 0,
@@ -85,21 +85,21 @@ const config = {
       'error',
       {
         destructuring: 'all',
-        ignoreReadBeforeAssign: false
-      }
+        ignoreReadBeforeAssign: false,
+      },
     ],
     'prefer-destructuring': [
       'error',
       {
         'VariableDeclarator': {
           'array': false,
-          'object': true
+          'object': true,
         },
         'AssignmentExpression': {
           'array': false,
-          'object': false
-        }
-      }
+          'object': false,
+        },
+      },
     ],
     'jsx-quotes': ['error', 'prefer-single'],
     'camelcase': ['off'],
@@ -116,26 +116,26 @@ const config = {
         js: 'never',
         jsx: 'never',
         ts: 'never',
-        tsx: 'never'
-      }
+        tsx: 'never',
+      },
     ],
     'import/prefer-default-export': ['off'],
     'react/no-deprecated': ['off'],
     'react/no-unused-class-component-methods': ['off'],
-    'arrow-body-style': ['off']
+    'arrow-body-style': ['off'],
   },
   overrides: [
     {
       files: ['test/**/*.js'],
       env: {
-        jest: true
+        jest: true,
       },
       rules: {
         'import/no-unresolved': 'off',
-        'import/extensions': 'off'
-      }
-    }
-  ]
-}
+        'import/extensions': 'off',
+      },
+    },
+  ],
+};
 
-module.exports = config
+module.exports = config;
