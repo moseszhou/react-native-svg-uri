@@ -7,7 +7,7 @@
   "types": "dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
-    "test": "./node_modules/mocha/bin/mocha --compilers js:babel-core/register",
+    "test": "jest",
     "build": "tsup"
   },
   "exports": {

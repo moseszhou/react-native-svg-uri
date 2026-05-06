@@ -10,7 +10,7 @@ import Svg, { Circle, Ellipse, G, LinearGradient, RadialGradient, Line, Path, Po
 
 import * as utils from './utils';
 
-type FillItem = { color: string; fill: string };
+export type FillItem = { color: string; fill: string };
 
 export interface SvgUriProps {
   width?: number | string;
@@ -35,9 +35,11 @@ function SvgUri(props: SvgUriProps) {
   const uri = source && typeof source === 'object' && 'uri' in source ? source.uri : undefined;
   const uriRef = useRef(uri);
 
-  useMemo(() => {
+  const prevXmlDataRef = useRef(xmlData);
+  if (prevXmlDataRef.current !== xmlData) {
+    prevXmlDataRef.current = xmlData;
     setSvgXmlData(xmlData, false);
-  }, [xmlData, setSvgXmlData]);
+  }
 
   const { current: svgXmlData } = svgXmlDataConst;
 
@@ -285,9 +287,9 @@ function inspectNode(
       if (isTextValue) {
         node.nodeName === 'text' && arrayElements.push(node.childNodes[i].nodeValue);
       } else {
-        const nodo = inspectNode(node.childNodes[i], fill, fillAll, width, height);
-        if (nodo != null) {
-          arrayElements.push(nodo);
+        const element = inspectNode(node.childNodes[i], fill, fillAll, width, height);
+        if (element != null) {
+          arrayElements.push(element);
         }
       }
     }

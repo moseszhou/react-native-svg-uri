@@ -1,14 +1,13 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "module": "NodeNext",
-    "moduleResolution": "node16",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "jsx": "react",
     "strict": true,
     "declaration": true,
     "skipLibCheck": true,
-    "esModuleInterop": true,
-    "ignoreDeprecations": "6.0"
+    "esModuleInterop": true
   },
   "include": ["src"]
 }
