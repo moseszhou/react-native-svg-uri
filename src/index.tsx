@@ -5,23 +5,8 @@ import { DOMParser } from 'xmldom';
 import resolveAssetSource from 'react-native/Libraries/Image/resolveAssetSource';
 
 // @ts-ignore
-import Svg, {
-  Circle,
-  Ellipse,
-  G,
-  LinearGradient,
-  RadialGradient,
-  Line,
-  Path,
-  Polygon,
-  Polyline,
-  Rect,
-  Text,
-  TSpan,
-  Defs,
-  Stop,
-  // @ts-ignore
-} from 'react-native-svg';
+// prettier-ignore
+import Svg, { Circle, Ellipse, G, LinearGradient, RadialGradient, Line, Path, Polygon, Polyline, Rect, Text, TSpan, Defs, Stop } from 'react-native-svg';
 
 import * as utils from './utils';
 
@@ -89,8 +74,10 @@ function SvgUri(props: SvgUriProps) {
   }, [source, fetchSVGData]);
 
   const flatStyle = StyleSheet.flatten(style) || {};
-  const width: number | string | undefined = _width ?? (flatStyle.width as number | string | undefined);
-  const height: number | string | undefined = _height ?? (flatStyle.height as number | string | undefined);
+  const rawWidth = flatStyle.width;
+  const width = _width ?? (typeof rawWidth === 'number' || typeof rawWidth === 'string' ? rawWidth : undefined);
+  const rawHeight = flatStyle.height;
+  const height = _height ?? (typeof rawHeight === 'number' || typeof rawHeight === 'string' ? rawHeight : undefined);
 
   const rootSVG = useMemo(() => {
     if (!svgXmlData) {
