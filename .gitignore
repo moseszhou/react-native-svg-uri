@@ -4,3 +4,4 @@ node_modules
 .cursorindexingignore
 .DS_Store
 .worktrees/
+.claude/settings.local.json

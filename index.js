@@ -319,9 +319,9 @@ function inspectNode(node, fill, fillAll, width, height) {
         // 解决svg文件中存在格式化的空格问题和换行问题
         node.nodeName === 'text' && arrayElements.push(node.childNodes[i].nodeValue);
       } else {
-        const nodo = inspectNode(node.childNodes[i], fill, fillAll, width, height);
-        if (nodo != null) {
-          arrayElements.push(nodo);
+        const element = inspectNode(node.childNodes[i], fill, fillAll, width, height);
+        if (element != null) {
+          arrayElements.push(element);
         }
       }
     }
