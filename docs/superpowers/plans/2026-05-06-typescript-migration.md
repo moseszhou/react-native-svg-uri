@@ -6,7 +6,7 @@
 
 **Architecture:** 源码移入 `src/`（index.tsx + utils.ts），tsup 构建为 `dist/`（CJS/ESM + 类型声明），package.json 通过 `exports` 字段对外暴露 dist 产物。
 
-**Tech Stack:** TypeScript 5.x, tsup（基于 esbuild），@types/react, @types/react-native, @types/xmldom
+**Tech Stack:** TypeScript 5.x, tsup（基于 esbuild），Jest，@types/react, @types/react-native, @types/xmldom
 
 ---
 
@@ -21,7 +21,8 @@
 | 修改 | `package.json` |
 | 修改 | `.babelrc` |
 | 修改 | `.gitignore` |
-| 修改 | `test/utils.js`（仅改 import 路径） |
+| 新建 | `jest.config.js` |
+| 修改 | `test/utils.js`（改 import 路径 + 断言语法） |
 | 删除 | `index.js` |
 | 删除 | `utils.js` |
 | 删除 | `index.d.ts` |
@@ -37,10 +38,10 @@
 - [ ] **Step 1: 安装新 devDependencies**
 
 ```bash
-yarn add --dev typescript tsup @types/react @types/react-native @types/xmldom @babel/preset-typescript
+yarn add --dev typescript tsup @types/react @types/react-native @types/xmldom @babel/preset-typescript @babel/preset-env jest babel-jest @types/jest
 ```
 
-Expected: 无报错，node_modules 中出现 `tsup`、`typescript`、`@types/react` 等目录，package.json 和 yarn.lock 自动更新。
+Expected: 无报错，node_modules 中出现 `tsup`、`typescript`、`jest`、`@types/react` 等目录，package.json 和 yarn.lock 自动更新。
 
 - [ ] **Step 3: 创建 tsconfig.json**
 
@@ -107,12 +108,13 @@ git commit -m "chore: add tsup build config"
 
 ---
 
-## Task 3: 转换 utils.js → src/utils.ts
+## Task 3: 转换 utils.js → src/utils.ts + 配置 Jest
 
 **Files:**
 - Create: `src/utils.ts`
+- Create: `jest.config.js`
 - Modify: `.babelrc`
-- Modify: `test/utils.js`（仅改 import 路径）
+- Modify: `test/utils.js`（改 import 路径 + 断言语法）
 
 - [ ] **Step 1: 创建 src/ 目录并新建 src/utils.ts**
 
@@ -163,54 +165,122 @@ export const getEnabledAttributes =
     enabledAttributes.includes(camelCase(nodeName));
 ```
 
-- [ ] **Step 2: 更新 .babelrc 以支持 TypeScript**
+- [ ] **Step 2: 更新 .babelrc 以支持 Jest + TypeScript**
 
-将 `.babelrc` 替换为：
+将 `.babelrc` 替换为（Jest 使用 node 环境，不需要 react-native preset；tsup 有自己的 esbuild，不依赖此文件）：
 
 ```json
 {
-  "presets": ["react-native", "@babel/preset-typescript"]
+  "presets": [
+    ["@babel/preset-env", { "targets": { "node": "current" } }],
+    "@babel/preset-typescript"
+  ]
 }
 ```
 
-- [ ] **Step 3: 更新测试的 import 路径**
+- [ ] **Step 3: 创建 jest.config.js**
 
-打开 `test/utils.js`，将第一行 import 改为：
+```javascript
+module.exports = {
+  testMatch: ['**/test/**/*.js'],
+  transform: {
+    '^.+\\.[jt]sx?$': 'babel-jest',
+  },
+};
+```
+
+- [ ] **Step 4: 更新 test/utils.js**
+
+将 `test/utils.js` 的内容替换为（`describe/it` 结构不变，去掉 chai，改用 Jest 内置断言）：
 
 ```javascript
 import {transformStyle, camelCase, removePixelsFromNodeValue, getEnabledAttributes} from '../src/utils';
+
+describe('transformStyle', () => {
+  it('transforms style attribute', () => {
+    expect(
+      transformStyle({nodeName: 'style', nodeValue: 'fill:rgb(0,0,255);stroke:rgb(0,0,0)'})
+    ).toEqual({
+      fill: 'rgb(0,0,255)',
+      stroke: 'rgb(0,0,0)',
+    });
+  });
+
+  it('transforms style attribute with dash-case attribute', () => {
+    expect(
+      transformStyle({nodeName: 'style', nodeValue: 'stop-color:#ffffff'})
+    ).toEqual({
+      stopColor: '#ffffff',
+    });
+  });
+});
+
+describe('removePixelsFromNodeValue', () => {
+  it('removes pixels from x, y, height and width attributes', () => {
+    expect(removePixelsFromNodeValue({nodeName: 'x', nodeValue: '2px'})).toEqual({nodeName: 'x', nodeValue: '2'});
+    expect(removePixelsFromNodeValue({nodeName: 'y', nodeValue: '4px'})).toEqual({nodeName: 'y', nodeValue: '4'});
+    expect(removePixelsFromNodeValue({nodeName: 'height', nodeValue: '65px'})).toEqual({nodeName: 'height', nodeValue: '65'});
+    expect(removePixelsFromNodeValue({nodeName: 'width', nodeValue: '999px'})).toEqual({nodeName: 'width', nodeValue: '999'});
+  });
+});
+
+describe('camelCase', () => {
+  it('transforms two word attribute with dash', () => {
+    expect(camelCase('stop-color')).toEqual('stopColor');
+  });
+
+  it('does not do anything to string that is already camel cased', () => {
+    expect(camelCase('stopColor')).toEqual('stopColor');
+  });
+});
+
+describe('getEnabledAttributes', () => {
+  it('return true when nodeName is found', () => {
+    const enabledAttributes = ['x', 'y', 'strokeOpacity'];
+    const hasEnabledAttribute = getEnabledAttributes(enabledAttributes);
+
+    expect(hasEnabledAttribute({nodeName: 'x'})).toEqual(true);
+    expect(hasEnabledAttribute({nodeName: 'stroke-opacity'})).toEqual(true);
+  });
+
+  it('return false when nodeName is not found', () => {
+    const enabledAttributes = ['width', 'height'];
+    const hasEnabledAttribute = getEnabledAttributes(enabledAttributes);
+
+    expect(hasEnabledAttribute({nodeName: 'depth'})).toEqual(false);
+  });
+});
 ```
 
-（其余测试内容不变）
-
-- [ ] **Step 4: 运行测试，确认通过**
+- [ ] **Step 5: 运行测试，确认通过**
 
 ```bash
-./node_modules/mocha/bin/mocha --compilers js:babel-core/register
+yarn jest
 ```
 
 Expected:
 ```
-transformStyle
-  ✓ transforms style attribute
-  ✓ transforms style attribute with dash-case attribute
-removePixelsFromNodeValue
-  ✓ removes pixels from x, y, height and width attributes
-camelCase
-  ✓ transforms two word attribute with dash
-  ✓ does not do anything to string that is already camel cased
-getEnabledAttributes
-  ✓ return true when nodeName is found
-  ✓ return false when nodeName is not found
+PASS test/utils.js
+  transformStyle
+    ✓ transforms style attribute
+    ✓ transforms style attribute with dash-case attribute
+  removePixelsFromNodeValue
+    ✓ removes pixels from x, y, height and width attributes
+  camelCase
+    ✓ transforms two word attribute with dash
+    ✓ does not do anything to string that is already camel cased
+  getEnabledAttributes
+    ✓ return true when nodeName is found
+    ✓ return false when nodeName is not found
 
-7 passing
+Tests: 7 passed, 7 total
 ```
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 6: 提交**
 
 ```bash
-git add src/utils.ts .babelrc test/utils.js
-git commit -m "feat: convert utils to TypeScript"
+git add src/utils.ts jest.config.js .babelrc test/utils.js
+git commit -m "feat: convert utils to TypeScript, replace mocha with Jest"
 ```
 
 ---
@@ -676,7 +746,7 @@ git commit -m "feat: convert index to TypeScript"
   },
   "scripts": {
     "build": "tsup",
-    "test": "./node_modules/mocha/bin/mocha --compilers js:babel-core/register"
+    "test": "jest"
   }
 }
 ```
@@ -762,10 +832,10 @@ Expected：包含 `export interface SvgUriProps` 和 `export default` 声明。
 - [ ] **Step 6: 运行测试，确认无回归**
 
 ```bash
-./node_modules/mocha/bin/mocha --compilers js:babel-core/register
+yarn jest
 ```
 
-Expected: 7 passing
+Expected: 7 passed, 7 total
 
 - [ ] **Step 7: 提交（如有修复）**
 
@@ -785,7 +855,7 @@ git commit -m "fix: resolve TypeScript build issues"
 - [ ] `tsconfig.json` 存在
 - [ ] `tsup.config.ts` 存在
 - [ ] `yarn build` 成功，`dist/` 有 index.js + index.mjs + index.d.ts
-- [ ] `yarn test` 7 passing
+- [ ] `yarn jest` 7 passed, 7 total
 - [ ] `package.json` 的 main/module/types/exports/files 已更新
 - [ ] `dist/` 已加入 `.gitignore`
 - [ ] 旧文件 index.js / utils.js / index.d.ts 已删除
