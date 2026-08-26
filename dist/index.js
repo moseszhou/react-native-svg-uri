@@ -69,7 +69,7 @@ var getEnabledAttributes = (enabledAttributes) => ({ nodeName }) => enabledAttri
 var ind = 0;
 var cacheFetchSVGDataPromise = {};
 function SvgUri(props) {
-  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height } = props;
+  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height, mode = "scaleToFill" } = props;
   const [svgXmlDataConst, setSvgXmlData] = useConstant(
     xmlData,
     (v1, v2) => v1 !== v2
@@ -125,23 +125,9 @@ function SvgUri(props) {
       svgXmlData.indexOf("</svg>") + 6
     );
     const doc = new import_xmldom.DOMParser().parseFromString(inputSVG, "text/xml");
-    return inspectNode(doc.childNodes[0], fill, fillAll, width, height);
-  }, [svgXmlData, fill, fillAll, width, height]);
+    return inspectNode(doc.childNodes[0], fill, fillAll, width, height, mode);
+  }, [svgXmlData, fill, fillAll, width, height, mode]);
   return /* @__PURE__ */ import_react.default.createElement(import_react_native.View, { style: [{ justifyContent: "center", alignItems: "center" }, style, { width, height }] }, rootSVG);
-}
-function fixYPosition(y, node) {
-  if (node.attributes) {
-    const fontSizeAttr = Object.keys(node.attributes).find(
-      (a) => node.attributes[a].name === "font-size"
-    );
-    if (fontSizeAttr) {
-      return String(parseFloat(y) - parseFloat(node.attributes[fontSizeAttr].value));
-    }
-  }
-  if (!node.parentNode) {
-    return y;
-  }
-  return fixYPosition(y, node.parentNode);
 }
 function getScale(size, orgSize) {
   const s = Number(size) / Number(orgSize);
@@ -154,10 +140,22 @@ function trimElementChildren(children) {
     }
   }
 }
-function getSvgScale(width, height, componentAtts) {
+function getSvgScale(width, height, componentAtts, mode) {
   const scaleWidth = getScale(width, componentAtts.width);
   const scaleHeight = getScale(height, componentAtts.height);
-  return Math.min(scaleWidth, scaleHeight);
+  if (mode === "scaleToFill") {
+    return { scaleX: scaleWidth, scaleY: scaleHeight };
+  }
+  const scale = mode === "aspectFill" ? Math.max(scaleWidth, scaleHeight) : Math.min(scaleWidth, scaleHeight);
+  return { scaleX: scale, scaleY: scale };
+}
+function normalizeTextAttributes(componentAtts) {
+  const { fontFamily, fontSize, fontWeight, ...rest } = componentAtts;
+  const font = {};
+  if (fontFamily) font.fontFamily = fontFamily;
+  if (fontSize) font.fontSize = fontSize;
+  if (fontWeight) font.fontWeight = fontWeight;
+  return Object.keys(font).length > 0 ? { ...rest, font } : rest;
 }
 function obtainComponentAtts(node, enabledAttributes, fill, fillAll) {
   const styleAtts = {};
@@ -195,7 +193,7 @@ function AddFill(fn, fill, fillAll) {
     return fn(node, enabledAttributes, fill, fillAll);
   };
 }
-function createSVGElement(node, children, fill, fillAll, width, height) {
+function createSVGElement(node, children, fill, fillAll, width, height, mode) {
   trimElementChildren(children);
   const _obtainComponentAtts = AddFill(obtainComponentAtts, fill, fillAll);
   let componentAtts = {};
@@ -203,8 +201,8 @@ function createSVGElement(node, children, fill, fillAll, width, height) {
   switch (node.nodeName) {
     case "svg": {
       componentAtts = _obtainComponentAtts(node, SVG_ATTS);
-      const scale = getSvgScale(width, height, componentAtts);
-      return /* @__PURE__ */ import_react.default.createElement(import_react_native_svg.default, { key: i, ...componentAtts, style: [componentAtts.style, { transform: [{ scale }] }] }, children);
+      const { scaleX, scaleY } = getSvgScale(width, height, componentAtts, mode);
+      return /* @__PURE__ */ import_react.default.createElement(import_react_native_svg.default, { key: i, ...componentAtts, style: [componentAtts.style, { transform: [{ scaleX }, { scaleY }] }] }, children);
     }
     case "g":
       componentAtts = _obtainComponentAtts(node, G_ATTS);
@@ -242,22 +240,16 @@ function createSVGElement(node, children, fill, fillAll, width, height) {
       componentAtts = _obtainComponentAtts(node, POLYLINE_ATTS);
       return /* @__PURE__ */ import_react.default.createElement(import_react_native_svg.Polyline, { key: i, ...componentAtts }, children);
     case "text":
-      componentAtts = _obtainComponentAtts(node, TEXT_ATTS);
-      if (componentAtts.y) {
-        componentAtts.y = fixYPosition(componentAtts.y, node);
-      }
+      componentAtts = normalizeTextAttributes(_obtainComponentAtts(node, TEXT_ATTS));
       return /* @__PURE__ */ import_react.default.createElement(import_react_native_svg.Text, { key: i, ...componentAtts }, children);
     case "tspan":
-      componentAtts = _obtainComponentAtts(node, TEXT_ATTS);
-      if (componentAtts.y) {
-        componentAtts.y = fixYPosition(componentAtts.y, node);
-      }
+      componentAtts = normalizeTextAttributes(_obtainComponentAtts(node, TEXT_ATTS));
       return /* @__PURE__ */ import_react.default.createElement(import_react_native_svg.TSpan, { key: i, ...componentAtts }, children);
     default:
       return null;
   }
 }
-function inspectNode(node, fill, fillAll, width, height) {
+function inspectNode(node, fill, fillAll, width, height, mode) {
   if (!ACCEPTED_SVG_ELEMENTS.includes(node.nodeName)) {
     return null;
   }
@@ -266,16 +258,16 @@ function inspectNode(node, fill, fillAll, width, height) {
     for (let i = 0; i < node.childNodes.length; i++) {
       const isTextValue = node.childNodes[i].nodeValue;
       if (isTextValue) {
-        node.nodeName === "text" && arrayElements.push(node.childNodes[i].nodeValue);
+        (node.nodeName === "text" || node.nodeName === "tspan") && arrayElements.push(node.childNodes[i].nodeValue);
       } else {
-        const element = inspectNode(node.childNodes[i], fill, fillAll, width, height);
+        const element = inspectNode(node.childNodes[i], fill, fillAll, width, height, mode);
         if (element != null) {
           arrayElements.push(element);
         }
       }
     }
   }
-  return createSVGElement(node, arrayElements, fill, fillAll, width, height);
+  return createSVGElement(node, arrayElements, fill, fillAll, width, height, mode);
 }
 function shallowEqual(prev, next) {
   if (prev === next) return true;
@@ -324,7 +316,7 @@ var useConstant = (defValue, defEqualityFn) => {
   return [constRef, setter];
 };
 var index_default = import_react.default.memo(SvgUri, (prevProps, nextProps) => {
-  return prevProps.svgXmlData === nextProps.svgXmlData && shallowEqual(prevProps.style, nextProps.style) && shallowEqual(prevProps.source, nextProps.source) && shallowEqual(prevProps.fill, nextProps.fill) && prevProps.fillAll === nextProps.fillAll;
+  return prevProps.svgXmlData === nextProps.svgXmlData && shallowEqual(prevProps.style, nextProps.style) && shallowEqual(prevProps.source, nextProps.source) && shallowEqual(prevProps.fill, nextProps.fill) && prevProps.fillAll === nextProps.fillAll && prevProps.mode === nextProps.mode;
 });
 var ACCEPTED_SVG_ELEMENTS = [
   "svg",
@@ -351,7 +343,7 @@ var RECT_ATTS = ["width", "height"];
 var LINE_ATTS = ["x1", "y1", "x2", "y2"];
 var LINEARG_ATTS = LINE_ATTS.concat(["id", "gradientUnits"]);
 var RADIALG_ATTS = CIRCLE_ATTS.concat(["id", "gradientUnits"]);
-var STOP_ATTS = ["offset"];
+var STOP_ATTS = ["offset", "stopColor"];
 var ELLIPSE_ATTS = ["cx", "cy", "rx", "ry"];
 var TEXT_ATTS = ["fontFamily", "fontSize", "fontWeight", "textAnchor"];
 var POLYGON_ATTS = ["points"];

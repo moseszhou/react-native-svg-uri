@@ -8,6 +8,7 @@ type FillItem = {
 interface SvgUriProps {
     width?: number | string;
     height?: number | string;
+    mode?: 'aspectFit' | 'aspectFill' | 'scaleToFill';
     source?: {
         uri: string;
     } | number;

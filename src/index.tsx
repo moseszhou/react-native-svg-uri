@@ -15,6 +15,7 @@ export type FillItem = { color: string; fill: string };
 export interface SvgUriProps {
   width?: number | string;
   height?: number | string;
+  mode?: 'aspectFit' | 'aspectFill' | 'scaleToFill';
   source?: { uri: string } | number;
   svgXmlData?: string;
   fill?: string | FillItem[];
@@ -27,7 +28,7 @@ let ind = 0;
 const cacheFetchSVGDataPromise: Record<string, Promise<string>> = {};
 
 function SvgUri(props: SvgUriProps) {
-  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height } = props;
+  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height, mode = 'scaleToFill' } = props;
   const [svgXmlDataConst, setSvgXmlData] = useConstant<string | undefined>(
     xmlData,
     (v1, v2) => v1 !== v2
@@ -90,29 +91,14 @@ function SvgUri(props: SvgUriProps) {
       svgXmlData.indexOf('</svg>') + 6
     );
     const doc = new DOMParser().parseFromString(inputSVG, 'text/xml');
-    return inspectNode(doc.childNodes[0] as any, fill, fillAll, width, height);
-  }, [svgXmlData, fill, fillAll, width, height]);
+    return inspectNode(doc.childNodes[0] as any, fill, fillAll, width, height, mode);
+  }, [svgXmlData, fill, fillAll, width, height, mode]);
 
   return (
     <View style={[{ justifyContent: 'center', alignItems: 'center' }, style, { width: width as any, height: height as any }]}>
       {rootSVG}
     </View>
   );
-}
-
-function fixYPosition(y: string, node: any): string {
-  if (node.attributes) {
-    const fontSizeAttr = Object.keys(node.attributes).find(
-      (a: string) => node.attributes[a].name === 'font-size'
-    );
-    if (fontSizeAttr) {
-      return String(parseFloat(y) - parseFloat(node.attributes[fontSizeAttr].value));
-    }
-  }
-  if (!node.parentNode) {
-    return y;
-  }
-  return fixYPosition(y, node.parentNode);
 }
 
 function getScale(size: number | string | undefined, orgSize: number | string | undefined): number {
@@ -131,11 +117,25 @@ function trimElementChildren(children: any[]): void {
 function getSvgScale(
   width: number | string | undefined,
   height: number | string | undefined,
-  componentAtts: Record<string, any>
-): number {
+  componentAtts: Record<string, any>,
+  mode: SvgUriProps['mode']
+): { scaleX: number; scaleY: number } {
   const scaleWidth = getScale(width, componentAtts.width);
   const scaleHeight = getScale(height, componentAtts.height);
-  return Math.min(scaleWidth, scaleHeight);
+  if (mode === 'scaleToFill') {
+    return { scaleX: scaleWidth, scaleY: scaleHeight };
+  }
+  const scale = mode === 'aspectFill' ? Math.max(scaleWidth, scaleHeight) : Math.min(scaleWidth, scaleHeight);
+  return { scaleX: scale, scaleY: scale };
+}
+
+function normalizeTextAttributes(componentAtts: Record<string, any>): Record<string, any> {
+  const { fontFamily, fontSize, fontWeight, ...rest } = componentAtts;
+  const font: Record<string, string> = {};
+  if (fontFamily) font.fontFamily = fontFamily;
+  if (fontSize) font.fontSize = fontSize;
+  if (fontWeight) font.fontWeight = fontWeight;
+  return Object.keys(font).length > 0 ? { ...rest, font } : rest;
 }
 
 function obtainComponentAtts(
@@ -199,7 +199,8 @@ function createSVGElement(
   fill: SvgUriProps['fill'],
   fillAll: boolean | undefined,
   width: number | string | undefined,
-  height: number | string | undefined
+  height: number | string | undefined,
+  mode: SvgUriProps['mode']
 ): React.ReactElement | null {
   trimElementChildren(children);
   const _obtainComponentAtts = AddFill(obtainComponentAtts, fill, fillAll);
@@ -209,9 +210,9 @@ function createSVGElement(
   switch (node.nodeName) {
     case 'svg': {
       componentAtts = _obtainComponentAtts(node, SVG_ATTS);
-      const scale = getSvgScale(width, height, componentAtts);
+      const { scaleX, scaleY } = getSvgScale(width, height, componentAtts, mode);
       return (
-        <Svg key={i} {...componentAtts} style={[componentAtts.style, { transform: [{ scale }] }]}>
+        <Svg key={i} {...componentAtts} style={[componentAtts.style, { transform: [{ scaleX }, { scaleY }] }]}>
           {children}
         </Svg>
       );
@@ -252,16 +253,10 @@ function createSVGElement(
       componentAtts = _obtainComponentAtts(node, POLYLINE_ATTS);
       return <Polyline key={i} {...componentAtts}>{children}</Polyline>;
     case 'text':
-      componentAtts = _obtainComponentAtts(node, TEXT_ATTS);
-      if (componentAtts.y) {
-        componentAtts.y = fixYPosition(componentAtts.y, node);
-      }
+      componentAtts = normalizeTextAttributes(_obtainComponentAtts(node, TEXT_ATTS));
       return <Text key={i} {...componentAtts}>{children}</Text>;
     case 'tspan':
-      componentAtts = _obtainComponentAtts(node, TEXT_ATTS);
-      if (componentAtts.y) {
-        componentAtts.y = fixYPosition(componentAtts.y, node);
-      }
+      componentAtts = normalizeTextAttributes(_obtainComponentAtts(node, TEXT_ATTS));
       return <TSpan key={i} {...componentAtts}>{children}</TSpan>;
     default:
       return null;
@@ -273,7 +268,8 @@ function inspectNode(
   fill: SvgUriProps['fill'],
   fillAll: boolean | undefined,
   width: number | string | undefined,
-  height: number | string | undefined
+  height: number | string | undefined,
+  mode: SvgUriProps['mode']
 ): React.ReactElement | null {
   if (!ACCEPTED_SVG_ELEMENTS.includes(node.nodeName)) {
     return null;
@@ -285,9 +281,10 @@ function inspectNode(
     for (let i = 0; i < node.childNodes.length; i++) {
       const isTextValue = node.childNodes[i].nodeValue;
       if (isTextValue) {
-        node.nodeName === 'text' && arrayElements.push(node.childNodes[i].nodeValue);
+        (node.nodeName === 'text' || node.nodeName === 'tspan') &&
+          arrayElements.push(node.childNodes[i].nodeValue);
       } else {
-        const element = inspectNode(node.childNodes[i], fill, fillAll, width, height);
+        const element = inspectNode(node.childNodes[i], fill, fillAll, width, height, mode);
         if (element != null) {
           arrayElements.push(element);
         }
@@ -295,7 +292,7 @@ function inspectNode(
     }
   }
 
-  return createSVGElement(node, arrayElements, fill, fillAll, width, height);
+  return createSVGElement(node, arrayElements, fill, fillAll, width, height, mode);
 }
 
 function shallowEqual(prev: any, next: any): boolean {
@@ -367,7 +364,8 @@ export default React.memo(SvgUri, (prevProps, nextProps) => {
     shallowEqual(prevProps.style, nextProps.style) &&
     shallowEqual(prevProps.source, nextProps.source) &&
     shallowEqual(prevProps.fill, nextProps.fill) &&
-    prevProps.fillAll === nextProps.fillAll
+    prevProps.fillAll === nextProps.fillAll &&
+    prevProps.mode === nextProps.mode
   );
 });
 
@@ -385,7 +383,7 @@ const RECT_ATTS = ['width', 'height'];
 const LINE_ATTS = ['x1', 'y1', 'x2', 'y2'];
 const LINEARG_ATTS = LINE_ATTS.concat(['id', 'gradientUnits']);
 const RADIALG_ATTS = CIRCLE_ATTS.concat(['id', 'gradientUnits']);
-const STOP_ATTS = ['offset'];
+const STOP_ATTS = ['offset', 'stopColor'];
 const ELLIPSE_ATTS = ['cx', 'cy', 'rx', 'ry'];
 const TEXT_ATTS = ['fontFamily', 'fontSize', 'fontWeight', 'textAnchor'];
 const POLYGON_ATTS = ['points'];
