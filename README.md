@@ -58,7 +58,38 @@ yarn add react-native-svg-uri-yum react-native-svg
 | `fill`       | `string \| FillItem[]`                         | —             | Replace all fills with one color, or map selected source colors to new colors |
 | `fillAll`    | `boolean`                                      | `false`       | Apply the `fill` value to the whole SVG tree                                  |
 | `style`      | `StyleProp<ViewStyle>`                         | —             | Style for the outer container                                                 |
-| `onLoad`     | `() => void`                                   | —             | Called after a remote SVG is loaded successfully                              |
+| `onLoad`     | `() => void`                                   | —             | Called after a source resource is fetched and its XML is validated                              |
+| `onError`    | `(error: Error) => void`                        | —             | Called when source loading, XML parsing, or node conversion fails             |
+
+### 加载失败回调 / Error callback
+
+`onError?: (error: Error) => void` 在静态资源 URI 解析、网络请求、HTTP 非成功状态、
+响应正文读取、SVG XML 解析或节点转换失败时调用。远程内容需通过 XML 校验后才触发
+`onLoad`；直接传入 `svgXmlData` 不触发 `onLoad`。未提供 `onError` 时保留警告日志。
+
+```tsx
+<SvgUri
+  source={{ uri: 'https://example.com/icon.svg' }}
+  onError={(error: Error) => console.warn('SVG 加载失败', error.message)}
+/>
+```
+
+- 回调接收 `Error`，不是 React Native 的 `nativeEvent` 对象。
+- 已卸载组件及被替换或移除资源的未完成请求不再触发回调。
+- 失败请求会移出缓存，再次挂载或切换资源时可以重新请求；不会自动重试。
+- 解析器仅报告 `warning` 时保留修复结果并继续渲染，不触发 `onError`；`error`、`fatalError` 或 SVG 结构校验失败时显示空内容并触发 `onError`。支持 XML 声明、注释及 `<svg/>`。
+- 不支持的 SVG 子节点仍按原有逻辑跳过；回调不捕获原生绘制层异常。
+
+`onError` receives an `Error` for source resolution, network, unsuccessful HTTP
+status, response body, XML parsing, or node conversion failures. Source resources
+trigger `onLoad` after fetching and XML validation; inline `svgXmlData` does not.
+Warnings are retained when no callback is provided. Callbacks from unmounted
+components and replaced or removed sources are ignored. Failed requests are
+evicted from the cache so a subsequent mount or source change can retry; retries
+are not automatic. Parser warnings retain the repaired SVG and do not trigger `onError`. Parser
+errors, fatal errors, or failed SVG structure validation render empty content and
+trigger `onError`. Unsupported child elements are still skipped, and native drawing errors
+are outside this callback's scope.
 
 `FillItem` has the following shape:
 

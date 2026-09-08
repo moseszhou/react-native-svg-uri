@@ -1,5 +1,5 @@
 // src/index.tsx
-import React, { useState, useRef, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useRef, useMemo, useEffect, useLayoutEffect, useCallback } from "react";
 import { View, StyleSheet } from "react-native";
 import { DOMParser } from "xmldom";
 import resolveAssetSource from "react-native/Libraries/Image/resolveAssetSource";
@@ -35,65 +35,121 @@ var getEnabledAttributes = (enabledAttributes) => ({ nodeName }) => enabledAttri
 var ind = 0;
 var cacheFetchSVGDataPromise = {};
 function SvgUri(props) {
-  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height, mode = "scaleToFill" } = props;
-  const [svgXmlDataConst, setSvgXmlData] = useConstant(
-    xmlData,
-    (v1, v2) => v1 !== v2
-  );
-  const uri = source && typeof source === "object" && "uri" in source ? source.uri : void 0;
-  const uriRef = useRef(uri);
+  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, onError, style, width: _width, height: _height, mode = "scaleToFill" } = props;
+  const [svgXmlDataConst, setSvgXmlData] = useConstant(xmlData, (v1, v2) => v1 !== v2);
+  const sourceValue = typeof source === "number" ? source : source?.uri;
+  const notifyLoad = useCommittedEvent(() => onLoad?.());
+  const notifyError = useCommittedEvent((error) => {
+    console.warn("ERROR SVG:", error);
+    onError?.(error);
+  });
   const prevXmlDataRef = useRef(xmlData);
   if (prevXmlDataRef.current !== xmlData) {
     prevXmlDataRef.current = xmlData;
     setSvgXmlData(xmlData, false);
   }
   const { current: svgXmlData } = svgXmlDataConst;
-  const fetchSVGData = useEvent(async (fetchUri) => {
-    let responseXML = null;
-    let error = null;
-    try {
-      if (!cacheFetchSVGDataPromise[fetchUri]) {
-        cacheFetchSVGDataPromise[fetchUri] = fetch(fetchUri).then((r) => r.text());
-      }
-      responseXML = await cacheFetchSVGDataPromise[fetchUri];
-    } catch (e) {
-      delete cacheFetchSVGDataPromise[fetchUri];
-      error = e;
-      console.warn("ERROR SVG fetchSVGData:", fetchUri, e);
-    } finally {
-      if (uriRef.current === fetchUri) {
-        setSvgXmlData(responseXML ?? void 0);
-        if (onLoad && !error) {
-          onLoad();
-        }
-      }
-    }
-    return responseXML;
-  });
   useEffect(() => {
-    if (typeof source === "number" || source && typeof source === "object" && "uri" in source) {
-      const _source = resolveAssetSource(source) || {};
-      uriRef.current = _source.uri;
-      fetchSVGData(_source.uri);
-    }
-  }, [source, fetchSVGData]);
+    if (sourceValue === void 0) return;
+    let active = true;
+    const load = async () => {
+      let responseXML;
+      try {
+        const resolved = resolveAssetSource(
+          typeof sourceValue === "string" ? { uri: sourceValue } : sourceValue
+        );
+        if (!resolved?.uri) throw new Error("Unable to resolve SVG source URI");
+        responseXML = await fetchSVGData(resolved.uri);
+      } catch (error) {
+        if (active) {
+          setSvgXmlData(void 0);
+          notifyError(toError(error));
+        }
+        return;
+      }
+      if (active) {
+        setSvgXmlData(responseXML);
+        notifyLoad();
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [sourceValue, setSvgXmlData, notifyLoad, notifyError]);
   const flatStyle = StyleSheet.flatten(style) || {};
   const rawWidth = flatStyle.width;
   const width = _width ?? (typeof rawWidth === "number" || typeof rawWidth === "string" ? rawWidth : void 0);
   const rawHeight = flatStyle.height;
   const height = _height ?? (typeof rawHeight === "number" || typeof rawHeight === "string" ? rawHeight : void 0);
-  const rootSVG = useMemo(() => {
-    if (!svgXmlData) {
-      return null;
+  const parsedSVG = useMemo(() => {
+    if (svgXmlData === void 0) return { root: null, error: null };
+    try {
+      return { root: parseSVG(svgXmlData), error: null };
+    } catch (error) {
+      return { root: null, error: toError(error) };
     }
-    const inputSVG = svgXmlData.substring(
-      svgXmlData.indexOf("<svg "),
-      svgXmlData.indexOf("</svg>") + 6
-    );
-    const doc = new DOMParser().parseFromString(inputSVG, "text/xml");
-    return inspectNode(doc.childNodes[0], fill, fillAll, width, height, mode);
-  }, [svgXmlData, fill, fillAll, width, height, mode]);
-  return /* @__PURE__ */ React.createElement(View, { style: [{ justifyContent: "center", alignItems: "center" }, style, { width, height }] }, rootSVG);
+  }, [svgXmlData]);
+  const renderedSVG = useMemo(() => {
+    if (!parsedSVG.root) return { element: null, error: parsedSVG.error };
+    try {
+      return {
+        element: inspectNode(parsedSVG.root, fill, fillAll, width, height, mode),
+        error: null
+      };
+    } catch (error) {
+      return { element: null, error: toError(error) };
+    }
+  }, [parsedSVG, fill, fillAll, width, height, mode]);
+  useEffect(() => {
+    if (renderedSVG.error) notifyError(renderedSVG.error);
+  }, [renderedSVG.error, notifyError]);
+  return /* @__PURE__ */ React.createElement(View, { style: [{ justifyContent: "center", alignItems: "center" }, style, { width, height }] }, renderedSVG.element);
+}
+function toError(error) {
+  return error instanceof Error ? error : new Error(String(error));
+}
+function parseSVG(xml) {
+  if (!xml.trimStart().startsWith("<")) {
+    throw new Error("Invalid SVG: expected XML markup");
+  }
+  let parseError;
+  const recordError = (message) => {
+    parseError ?? (parseError = new Error(message));
+  };
+  const doc = new DOMParser({
+    errorHandler: {
+      warning: (message) => console.warn(message),
+      error: recordError,
+      fatalError: recordError
+    }
+  }).parseFromString(xml, "text/xml");
+  if (parseError) throw parseError;
+  if (!doc?.documentElement || doc.documentElement.nodeName !== "svg") {
+    throw new Error("Invalid SVG: expected an svg root element");
+  }
+  const hasInvalidSibling = Array.from(doc.childNodes).some(
+    (node) => node.nodeType === 1 && node !== doc.documentElement || (node.nodeType === 3 || node.nodeType === 4) && Boolean(node.nodeValue?.trim())
+  );
+  if (hasInvalidSibling) throw new Error("Invalid SVG: unexpected content outside the root element");
+  return doc.documentElement;
+}
+function fetchSVGData(uri) {
+  if (!cacheFetchSVGDataPromise[uri]) {
+    cacheFetchSVGDataPromise[uri] = (async () => {
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error(`Unable to load SVG: HTTP ${response.status} (${uri})`);
+      }
+      const xml = await response.text();
+      parseSVG(xml);
+      return xml;
+    })().catch((error) => {
+      delete cacheFetchSVGDataPromise[uri];
+      throw error;
+    });
+  }
+  return cacheFetchSVGDataPromise[uri];
 }
 function getScale(size, orgSize) {
   const s = Number(size) / Number(orgSize);
@@ -248,6 +304,13 @@ function shallowEqual(prev, next) {
   }
   return true;
 }
+function useCommittedEvent(callback) {
+  const callbackRef = useRef(callback);
+  useLayoutEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+  return useCallback((...args) => callbackRef.current(...args), []);
+}
 function useEvent(callback) {
   const ref = useRef(callback);
   ref.current = callback;
@@ -282,7 +345,7 @@ var useConstant = (defValue, defEqualityFn) => {
   return [constRef, setter];
 };
 var index_default = React.memo(SvgUri, (prevProps, nextProps) => {
-  return prevProps.svgXmlData === nextProps.svgXmlData && shallowEqual(prevProps.style, nextProps.style) && shallowEqual(prevProps.source, nextProps.source) && shallowEqual(prevProps.fill, nextProps.fill) && prevProps.fillAll === nextProps.fillAll && prevProps.mode === nextProps.mode;
+  return prevProps.svgXmlData === nextProps.svgXmlData && shallowEqual(prevProps.style, nextProps.style) && shallowEqual(prevProps.source, nextProps.source) && shallowEqual(prevProps.fill, nextProps.fill) && prevProps.fillAll === nextProps.fillAll && prevProps.mode === nextProps.mode && prevProps.width === nextProps.width && prevProps.height === nextProps.height && prevProps.onLoad === nextProps.onLoad && prevProps.onError === nextProps.onError;
 });
 var ACCEPTED_SVG_ELEMENTS = [
   "svg",

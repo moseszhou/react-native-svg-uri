@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useLayoutEffect, useCallback } from 'react';
 import { View, StyleProp, ViewStyle, StyleSheet } from 'react-native';
 import { DOMParser } from 'xmldom';
 // @ts-ignore
@@ -10,31 +10,62 @@ import Svg, { Circle, Ellipse, G, LinearGradient, RadialGradient, Line, Path, Po
 
 import * as utils from './utils';
 
-export type FillItem = { color: string; fill: string };
+/** 将指定的 SVG 原始填充色映射为新颜色。 */
+export type FillItem = {
+  /** SVG 中的原始颜色。 */
+  color: string;
+  /** 替换后的颜色。 */
+  fill: string;
+};
 
+/** SVG 图片的输入、显示参数及加载事件。 */
 export interface SvgUriProps {
+  /** 显示宽度；数字使用 React Native 布局单位，字符串可使用百分比。 */
   width?: number | string;
+  /** 显示高度；数字使用 React Native 布局单位，字符串可使用百分比。 */
   height?: number | string;
+  /** SVG 缩放模式，默认 scaleToFill。 */
   mode?: 'aspectFit' | 'aspectFill' | 'scaleToFill';
+  /** 远程 URI 或 require 返回的静态资源编号。 */
   source?: { uri: string } | number;
+  /** 直接渲染的 SVG XML 内容。 */
   svgXmlData?: string;
+  /** 统一填充色或原始颜色映射。 */
   fill?: string | FillItem[];
+  /**
+   * source 资源获取并通过 XML 校验后调用，不代表原生绘制完成。
+   * @returns 无返回值。
+   */
   onLoad?: () => void;
+  /**
+   * 当前资源加载、XML 解析或节点转换失败时调用。
+   * @param error 标准化后的错误对象。
+   * @returns 无返回值。
+   */
+  onError?: (error: Error) => void;
+  /** 是否对整棵 SVG 树应用填充色。 */
   fillAll?: boolean;
+  /** 外层容器样式。 */
   style?: StyleProp<ViewStyle>;
 }
 
 let ind = 0;
 const cacheFetchSVGDataPromise: Record<string, Promise<string>> = {};
 
+/**
+ * 将 SVG 资源或 XML 字符串转换为 React Native SVG 元素。
+ * @param props 输入资源、显示参数和事件回调。
+ * @returns SVG 外层容器。
+ */
 function SvgUri(props: SvgUriProps) {
-  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, style, width: _width, height: _height, mode = 'scaleToFill' } = props;
-  const [svgXmlDataConst, setSvgXmlData] = useConstant<string | undefined>(
-    xmlData,
-    (v1, v2) => v1 !== v2
-  );
-  const uri = source && typeof source === 'object' && 'uri' in source ? source.uri : undefined;
-  const uriRef = useRef(uri);
+  const { fill, fillAll, svgXmlData: xmlData, source, onLoad, onError, style, width: _width, height: _height, mode = 'scaleToFill' } = props;
+  const [svgXmlDataConst, setSvgXmlData] = useConstant<string | undefined>(xmlData, (v1, v2) => v1 !== v2);
+  const sourceValue = typeof source === 'number' ? source : source?.uri;
+  const notifyLoad = useCommittedEvent(() => onLoad?.());
+  const notifyError = useCommittedEvent((error: Error) => {
+    console.warn('ERROR SVG:', error);
+    onError?.(error);
+  });
 
   const prevXmlDataRef = useRef(xmlData);
   if (prevXmlDataRef.current !== xmlData) {
@@ -44,37 +75,36 @@ function SvgUri(props: SvgUriProps) {
 
   const { current: svgXmlData } = svgXmlDataConst;
 
-  // eslint-disable-next-line no-shadow
-  const fetchSVGData = useEvent(async (fetchUri: string) => {
-    let responseXML: string | null = null;
-    let error: unknown = null;
-    try {
-      if (!cacheFetchSVGDataPromise[fetchUri]) {
-        cacheFetchSVGDataPromise[fetchUri] = fetch(fetchUri).then((r) => r.text());
-      }
-      responseXML = await cacheFetchSVGDataPromise[fetchUri];
-    } catch (e) {
-      delete cacheFetchSVGDataPromise[fetchUri];
-      error = e;
-      console.warn('ERROR SVG fetchSVGData:', fetchUri, e);
-    } finally {
-      if (uriRef.current === fetchUri) {
-        setSvgXmlData(responseXML ?? undefined);
-        if (onLoad && !error) {
-          onLoad();
-        }
-      }
-    }
-    return responseXML;
-  });
-
   useEffect(() => {
-    if (typeof source === 'number' || (source && typeof source === 'object' && 'uri' in source)) {
-      const _source = resolveAssetSource(source) || {};
-      uriRef.current = _source.uri;
-      fetchSVGData(_source.uri);
-    }
-  }, [source, fetchSVGData]);
+    if (sourceValue === undefined) return;
+    let active = true;
+
+    const load = async () => {
+      let responseXML: string;
+      try {
+        const resolved: { uri?: string } | null = resolveAssetSource(
+          typeof sourceValue === 'string' ? { uri: sourceValue } : sourceValue
+        );
+        if (!resolved?.uri) throw new Error('Unable to resolve SVG source URI');
+        responseXML = await fetchSVGData(resolved.uri);
+      } catch (error: unknown) {
+        if (active) {
+          setSvgXmlData(undefined);
+          notifyError(toError(error));
+        }
+        return;
+      }
+      if (active) {
+        setSvgXmlData(responseXML);
+        notifyLoad();
+      }
+    };
+
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [sourceValue, setSvgXmlData, notifyLoad, notifyError]);
 
   const flatStyle = StyleSheet.flatten(style) || {};
   const rawWidth = flatStyle.width;
@@ -82,23 +112,101 @@ function SvgUri(props: SvgUriProps) {
   const rawHeight = flatStyle.height;
   const height = _height ?? (typeof rawHeight === 'number' || typeof rawHeight === 'string' ? rawHeight : undefined);
 
-  const rootSVG = useMemo(() => {
-    if (!svgXmlData) {
-      return null;
+  const parsedSVG = useMemo(() => {
+    if (svgXmlData === undefined) return { root: null, error: null };
+    try {
+      return { root: parseSVG(svgXmlData), error: null };
+    } catch (error: unknown) {
+      return { root: null, error: toError(error) };
     }
-    const inputSVG = svgXmlData.substring(
-      svgXmlData.indexOf('<svg '),
-      svgXmlData.indexOf('</svg>') + 6
-    );
-    const doc = new DOMParser().parseFromString(inputSVG, 'text/xml');
-    return inspectNode(doc.childNodes[0] as any, fill, fillAll, width, height, mode);
-  }, [svgXmlData, fill, fillAll, width, height, mode]);
+  }, [svgXmlData]);
+
+  const renderedSVG = useMemo(() => {
+    if (!parsedSVG.root) return { element: null, error: parsedSVG.error };
+    try {
+      return {
+        element: inspectNode(parsedSVG.root, fill, fillAll, width, height, mode),
+        error: null,
+      };
+    } catch (error: unknown) {
+      return { element: null, error: toError(error) };
+    }
+  }, [parsedSVG, fill, fillAll, width, height, mode]);
+
+  useEffect(() => {
+    if (renderedSVG.error) notifyError(renderedSVG.error);
+  }, [renderedSVG.error, notifyError]);
 
   return (
     <View style={[{ justifyContent: 'center', alignItems: 'center' }, style, { width: width as any, height: height as any }]}>
-      {rootSVG}
+      {renderedSVG.element}
     </View>
   );
+}
+
+/**
+ * 将异常值转换为统一的 Error，保留已有 Error 对象。
+ * @param error 捕获的异常值。
+ * @returns 标准错误对象。
+ */
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * 解析完整 XML 并验证 SVG 根节点，保留仅产生 warning 的容错结果。
+ * @param xml SVG XML 字符串。
+ * @returns SVG 根元素。
+ */
+function parseSVG(xml: string): Element {
+  if (!xml.trimStart().startsWith('<')) {
+    throw new Error('Invalid SVG: expected XML markup');
+  }
+  let parseError: Error | undefined;
+  const recordError = (message: string) => {
+    parseError ??= new Error(message);
+  };
+  const doc = new DOMParser({
+    errorHandler: {
+      warning: (message: string) => console.warn(message),
+      error: recordError,
+      fatalError: recordError,
+    },
+  }).parseFromString(xml, 'text/xml');
+  if (parseError) throw parseError;
+  if (!doc?.documentElement || doc.documentElement.nodeName !== 'svg') {
+    throw new Error('Invalid SVG: expected an svg root element');
+  }
+  const hasInvalidSibling = Array.from(doc.childNodes).some(
+    (node) =>
+      (node.nodeType === 1 && node !== doc.documentElement) ||
+      ((node.nodeType === 3 || node.nodeType === 4) && Boolean(node.nodeValue?.trim()))
+  );
+  if (hasInvalidSibling) throw new Error('Invalid SVG: unexpected content outside the root element');
+  return doc.documentElement;
+}
+
+/**
+ * 复用同 URI 的请求，只缓存获取并通过 XML 校验的内容。
+ * @param uri SVG 资源 URI。
+ * @returns 经校验的 SVG XML 内容。
+ */
+function fetchSVGData(uri: string): Promise<string> {
+  if (!cacheFetchSVGDataPromise[uri]) {
+    cacheFetchSVGDataPromise[uri] = (async () => {
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error(`Unable to load SVG: HTTP ${response.status} (${uri})`);
+      }
+      const xml = await response.text();
+      parseSVG(xml);
+      return xml;
+    })().catch((error: unknown) => {
+      delete cacheFetchSVGDataPromise[uri];
+      throw error;
+    });
+  }
+  return cacheFetchSVGDataPromise[uri];
 }
 
 function getScale(size: number | string | undefined, orgSize: number | string | undefined): number {
@@ -309,6 +417,23 @@ function shallowEqual(prev: any, next: any): boolean {
   return true;
 }
 
+/**
+ * 返回稳定的事件函数，始终调用最近一次已提交的回调。
+ * @param callback 当前渲染提供的事件回调。
+ * @returns 引用稳定的事件函数。
+ */
+function useCommittedEvent<Args extends unknown[], Result>(
+  callback: (...args: Args) => Result
+): (...args: Args) => Result {
+  const callbackRef = useRef(callback);
+
+  useLayoutEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+
+  return useCallback((...args: Args): Result => callbackRef.current(...args), []);
+}
+
 function useEvent<T extends (...args: any[]) => any>(callback: T): T {
   const ref = useRef<T>(callback);
   ref.current = callback;
@@ -365,7 +490,11 @@ export default React.memo(SvgUri, (prevProps, nextProps) => {
     shallowEqual(prevProps.source, nextProps.source) &&
     shallowEqual(prevProps.fill, nextProps.fill) &&
     prevProps.fillAll === nextProps.fillAll &&
-    prevProps.mode === nextProps.mode
+    prevProps.mode === nextProps.mode &&
+    prevProps.width === nextProps.width &&
+    prevProps.height === nextProps.height &&
+    prevProps.onLoad === nextProps.onLoad &&
+    prevProps.onError === nextProps.onError
   );
 });
 
